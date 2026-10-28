@@ -319,25 +319,39 @@ async function submitNewBook(e) {
     const nameInput = document.getElementById('new-book-name');
     const descInput = document.getElementById('new-book-desc');
     const colorInput = document.getElementById('new-book-color');
-    const name = nameInput.value.trim();
+    const name = nameInput ? nameInput.value.trim() : '';
 
     if (!name) {
         alert('يرجى إدخال اسم الكتاب أو المادة');
         return;
     }
 
+    const saveBtn = (e && e.target) ? e.target : document.querySelector('#modal-new-book button[onclick*="submitNewBook"]');
+    const origText = saveBtn ? saveBtn.innerHTML : '';
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerText = 'جاري حفظ الكتاب...';
+    }
+
     try {
-        await window.studyDB.addBook({
+        const newBookId = await window.studyDB.addBook({
             name: name,
-            description: descInput.value.trim(),
+            description: descInput ? descInput.value.trim() : '',
             color: colorInput ? colorInput.value : '#3b82f6',
             icon: 'book'
         });
+        console.log('Book added successfully with ID:', newBookId);
         closeNewBookModal();
         await loadBooks();
         await loadStats();
     } catch (err) {
-        alert('حدث خطأ أثناء حفظ الكتاب: ' + err.message);
+        console.error('Failed to save book:', err);
+        alert('حدث خطأ أثناء حفظ الكتاب: ' + (err.message || err));
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = origText;
+        }
     }
 }
 
