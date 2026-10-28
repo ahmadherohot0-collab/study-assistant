@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>مساعد الدراسة الذكي | Smart Study Assistant</title>
   
   <!-- PWA Meta -->
@@ -48,8 +48,16 @@
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 
   <style>
+    :root {
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+    }
     body {
       font-family: 'Cairo', sans-serif;
+      padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+    .safe-header {
+      padding-top: max(env(safe-area-inset-top, 0px), 8px);
     }
     .custom-scrollbar::-webkit-scrollbar {
       width: 6px;
@@ -68,48 +76,50 @@
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-200">
 
   <!-- App Header -->
-  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
+  <header class="sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm safe-header">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-      <div class="flex items-center justify-between h-16">
+      <div class="flex items-center justify-between min-h-[4rem] py-2 gap-2 flex-wrap sm:flex-nowrap">
         
         <!-- Brand Logo & Name -->
-        <div class="flex items-center space-x-3 space-x-reverse cursor-pointer" onclick="switchTab('books')">
+        <div class="flex items-center space-x-2.5 space-x-reverse cursor-pointer shrink-0" onclick="switchTab('books')">
           <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
             <i data-lucide="book-open-check" class="w-6 h-6"></i>
           </div>
           <div>
-            <h1 class="text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              مساعد الدراسة
-              <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <h1 class="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white">
+                مساعد الدراسة
+              </h1>
+              <span class="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 whitespace-nowrap">
                 سحابي ومستقل 24/7 ⚡
               </span>
-            </h1>
-            <p class="text-xs text-slate-500 dark:text-slate-400">استخراج أسئلة ومراجعات شاملة</p>
+            </div>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400">استخراج أسئلة ومراجعات شاملة</p>
           </div>
         </div>
 
         <!-- Header Actions -->
-        <div class="flex items-center space-x-2 space-x-reverse">
+        <div class="flex items-center space-x-1.5 space-x-reverse shrink-0">
           <!-- Backup Export/Import Buttons -->
-          <button onclick="exportBackupFile()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="تصدير نسخة احتياطية من جميع كتبك وأسئلتك">
-            <i data-lucide="download" class="w-4 h-4 text-emerald-600"></i>
-            <span class="hidden md:inline">نسخ احتياطي</span>
+          <button onclick="exportBackupFile()" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="تصدير نسخة احتياطية من جميع كتبك وأسئلتك">
+            <i data-lucide="download" class="w-3.5 h-3.5 text-emerald-600"></i>
+            <span class="text-[11px]">نسخ</span>
           </button>
 
-          <button onclick="triggerImportBackupFile()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="استعادة نسخة احتياطية من ملف">
-            <i data-lucide="upload" class="w-4 h-4 text-indigo-600"></i>
-            <span class="hidden md:inline">استعادة</span>
+          <button onclick="triggerImportBackupFile()" class="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="استعادة نسخة احتياطية من ملف">
+            <i data-lucide="upload" class="w-3.5 h-3.5 text-indigo-600"></i>
+            <span class="text-[11px]">استعادة</span>
           </button>
 
           <!-- Mobile Connect QR Button -->
-          <button onclick="openQrModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition">
-            <i data-lucide="smartphone" class="w-4 h-4"></i>
-            <span>تطبيق الجوال 📱</span>
+          <button onclick="openQrModal()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition">
+            <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
+            <span class="text-[11px]">الجوال 📱</span>
           </button>
 
           <!-- Dark/Light Mode Toggle -->
           <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="تبديل المظهر">
-            <i data-lucide="moon" id="theme-icon" class="w-5 h-5"></i>
+            <i data-lucide="moon" id="theme-icon" class="w-4 h-4"></i>
           </button>
         </div>
 
