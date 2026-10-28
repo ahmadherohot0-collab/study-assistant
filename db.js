@@ -50,11 +50,10 @@ class StudyDB {
         }
       };
 
-      request.onsuccess = async (e) => {
+      request.onsuccess = (e) => {
         this.db = e.target.result;
-        // Auto-seed if database is completely empty
-        await this.autoSeedIfEmpty();
         resolve(this.db);
+        this.autoSeedIfEmpty();
       };
 
       request.onerror = (e) => {
@@ -65,8 +64,16 @@ class StudyDB {
   }
 
   async autoSeedIfEmpty() {
-    const books = await this.getBooks();
-    if (books.length === 0 && INITIAL_SEED_DATA && INITIAL_SEED_DATA.length > 0) {
+    try {
+      await this.initPromise;
+      const count = await new Promise((res) => {
+        const tx = this.db.transaction('books', 'readonly');
+        const store = tx.objectStore('books');
+        const req = store.count();
+        req.onsuccess = () => res(req.result);
+        req.onerror = () => res(0);
+      });
+      if (count === 0 && INITIAL_SEED_DATA && INITIAL_SEED_DATA.length > 0) {
       console.log('Seeding initial data into IndexedDB...');
       for (const item of INITIAL_SEED_DATA) {
         const originalBook = item.book;
@@ -120,30 +127,39 @@ class StudyDB {
         }
       }
       console.log('Database seeded successfully!');
+      if (typeof loadBooks === 'function') loadBooks();
+      if (typeof loadStats === 'function') loadStats();
+    }
+    } catch(err) {
+      console.warn('Seeding warning:', err);
     }
   }
 
   // --- Books CRUD ---
   async getBooks() {
     await this.initPromise;
-    return new Promise((resolve, reject) => {
+    const books = await new Promise((resolve, reject) => {
       const tx = this.db.transaction('books', 'readonly');
       const store = tx.objectStore('books');
       const req = store.getAll();
-      req.onsuccess = async () => {
-        const books = req.result || [];
-        // calculate counts
-        for (const b of books) {
-          const mats = await this.getMaterials(b.id);
-          const qs = await this.getQuestions(b.id);
-          b.materials_count = mats.length;
-          b.questions_count = qs.length;
-          b.avg_score = 0;
-        }
-        resolve(books);
-      };
+      req.onsuccess = () => resolve(req.result || []);
       req.onerror = () => reject(req.error);
     });
+
+    for (const b of books) {
+      try {
+        const mats = await this.getMaterials(b.id);
+        const qs = await this.getQuestions(b.id);
+        b.materials_count = mats.length;
+        b.questions_count = qs.length;
+        b.avg_score = 0;
+      } catch(e) {
+        b.materials_count = 0;
+        b.questions_count = 0;
+        b.avg_score = 0;
+      }
+    }
+    return books;
   }
 
   async getBook(id) {
