@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>مساعد الدراسة الذكي | Smart Study Assistant</title>
+  
+  <!-- PWA Meta -->
+  <link rel="manifest" href="./manifest.json">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="icon" type="image/png" href="./icon.png">
+  <link rel="apple-touch-icon" href="./icon.png">
+
+  <!-- Google Fonts: Cairo -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            cairo: ['Cairo', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Marked for markdown parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Cairo', sans-serif;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.05);
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: rgba(100, 116, 139, 0.3);
+      border-radius: 9999px;
+    }
+    [v-cloak] { display: none; }
+  </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-200">
+
+  <!-- App Header -->
+  <header class="sticky top-0 z-40 bg-white/90 dark:bg-slate-900/90 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 shadow-sm">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        
+        <!-- Brand Logo & Name -->
+        <div class="flex items-center space-x-3 space-x-reverse cursor-pointer" onclick="switchTab('books')">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white shadow-md shadow-brand-500/20">
+            <i data-lucide="book-open-check" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h1 class="text-lg font-black tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+              مساعد الدراسة
+              <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700">
+                سحابي ومستقل 24/7 ⚡
+              </span>
+            </h1>
+            <p class="text-xs text-slate-500 dark:text-slate-400">استخراج أسئلة ومراجعات شاملة</p>
+          </div>
+        </div>
+
+        <!-- Header Actions -->
+        <div class="flex items-center space-x-2 space-x-reverse">
+          <!-- Backup Export/Import Buttons -->
+          <button onclick="exportBackupFile()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="تصدير نسخة احتياطية من جميع كتبك وأسئلتك">
+            <i data-lucide="download" class="w-4 h-4 text-emerald-600"></i>
+            <span class="hidden md:inline">نسخ احتياطي</span>
+          </button>
+
+          <button onclick="triggerImportBackupFile()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="استعادة نسخة احتياطية من ملف">
+            <i data-lucide="upload" class="w-4 h-4 text-indigo-600"></i>
+            <span class="hidden md:inline">استعادة</span>
+          </button>
+
+          <!-- Mobile Connect QR Button -->
+          <button onclick="openQrModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition">
+            <i data-lucide="smartphone" class="w-4 h-4"></i>
+            <span>تطبيق الجوال 📱</span>
+          </button>
+
+          <!-- Dark/Light Mode Toggle -->
+          <button onclick="toggleDarkMode()" class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="تبديل المظهر">
+            <i data-lucide="moon" id="theme-icon" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex space-x-1 space-x-reverse overflow-x-auto custom-scrollbar pb-1 text-sm font-bold border-t border-slate-100 dark:border-slate-800/60 pt-1">
+        <button onclick="switchTab('books')" id="tab-btn-books" class="nav-tab px-4 py-2.5 rounded-lg flex items-center gap-2 text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/50 transition whitespace-nowrap">
+          <i data-lucide="library" class="w-4 h-4"></i>
+          <span>الكتب والمواد</span>
+        </button>
+
+        <button onclick="switchTab('upload')" id="tab-btn-upload" class="nav-tab px-4 py-2.5 rounded-lg flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition whitespace-nowrap">
+          <i data-lucide="file-up" class="w-4 h-4"></i>
+          <span>دراسة واستخراج</span>
+        </button>
+
+        <button onclick="switchTab('quiz')" id="tab-btn-quiz" class="nav-tab px-4 py-2.5 rounded-lg flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition whitespace-nowrap">
+          <i data-lucide="sparkles" class="w-4 h-4 text-amber-500"></i>
+          <span>اختبرني الآن</span>
+        </button>
+
+        <button onclick="switchTab('bank')" id="tab-btn-bank" class="nav-tab px-4 py-2.5 rounded-lg flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition whitespace-nowrap">
+          <i data-lucide="help-circle" class="w-4 h-4"></i>
+          <span>بنك الأسئلة</span>
+        </button>
+
+        <button onclick="switchTab('stats')" id="tab-btn-stats" class="nav-tab px-4 py-2.5 rounded-lg flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition whitespace-nowrap">
+          <i data-lucide="bar-chart-3" class="w-4 h-4"></i>
+          <span>سجل التقدم</span>
+        </button>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Main Content Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
+
+    <!-- TAB 1: BOOKS & SUBJECTS -->
+    <section id="view-books" class="tab-view block space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 class="text-2xl font-black text-slate-900 dark:text-white">أقسام المواد والكتب</h2>
+          <p class="text-sm text-slate-500 dark:text-slate-400">نظّم كتبك الدراسية، أضف صفحات جديدة، واختبر نفسك في أي وقت 24/7 دون الحاجة لتشغيل الكمبيوتر</p>
+        </div>
+        <button onclick="openNewBookModal()" class="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold shadow-lg shadow-brand-500/25 transition">
+          <i data-lucide="plus-circle" class="w-5 h-5"></i>
+          <span>إضافة كتاب جديد</span>
+        </button>
+      </div>
+
+      <!-- Books Grid -->
+      <div id="books-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <!-- Injected via JS -->
+      </div>
+    </section>
+
+    <!-- TAB 2: STUDY & UPLOAD -->
+    <section id="view-upload" class="tab-view hidden max-w-3xl mx-auto space-y-6">
+      <div class="text-center space-y-2">
+        <h2 class="text-2xl font-black text-slate-900 dark:text-white">إضافة صفحات جديدة للدراسة</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400">التقط صور الصفحات بكاميرا الجوال أو ارفعها، ودع الذكاء الاصطناعي يلخصها ويستخرج أسئلة اختبارية دقيقة من نص الكتاب حصراً</p>
+      </div>
+
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-5">
+        
+        <!-- Book Selection -->
+        <div>
+          <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">اختر الكتاب أو المادة <span class="text-rose-500">*</span></label>
+          <select id="upload-book-select" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
+            <option value="">-- اختر كتاباً --</option>
+          </select>
+        </div>
+
+        <!-- Title & Page Range -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">عنوان الدرس أو الموضوع <span class="text-rose-500">*</span></label>
+            <input type="text" id="upload-title" placeholder="مثال: الباب الأول - مقدمة وتعاريف" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+          <div>
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">أرقام الصفحات (اختياري)</label>
+            <input type="text" id="upload-pages" placeholder="مثال: ص 15 إلى 18" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none">
+          </div>
+        </div>
+
+        <!-- File Upload Zone -->
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300">رفع صور الصفحات أو التقاطها</label>
+            <span class="text-xs font-bold text-brand-600 bg-brand-50 dark:bg-brand-950/60 px-2.5 py-0.5 rounded-full">كل صورة = صفحة كاملة</span>
+          </div>
+
+          <!-- Full Page Notice Callout -->
+          <div class="mb-3 p-3 bg-amber-50/80 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-200 flex items-start gap-2.5">
+            <i data-lucide="book-open" class="w-4 h-4 shrink-0 text-amber-600 mt-0.5"></i>
+            <div>
+              <span class="font-black">📖 توثيق الصفحات الكاملة:</span>
+              <span class="text-[11px] block text-amber-700 dark:text-amber-300 mt-0.5">كل صورة تلتقطها أو ترفعها تُحفظ كـ <b>صفحة كاملة ومستقلة</b> من الكتاب، ويتم استخراج كافة النصوص والتعاريف والأسئلة منها بدقة تامة دون خروج عن النص ودون مصطلحات أجنبية غريبة.</span>
+            </div>
+          </div>
+
+          <!-- Action buttons: Camera capture & File picker -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+            <button type="button" onclick="document.getElementById('camera-input').click()" class="py-3 px-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border-2 border-dashed border-indigo-300 dark:border-indigo-700 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-xs flex items-center justify-center gap-2 transition">
+              <i data-lucide="camera" class="w-5 h-5 text-indigo-600"></i>
+              <span>📸 التقاط صفحة بالكاميرا مباشرة</span>
+            </button>
+            <button type="button" onclick="document.getElementById('file-input').click()" class="py-3 px-4 rounded-xl bg-brand-50 dark:bg-brand-950/60 border-2 border-dashed border-brand-300 dark:border-brand-700 hover:bg-brand-100 text-brand-700 dark:text-brand-300 font-bold text-xs flex items-center justify-center gap-2 transition">
+              <i data-lucide="image" class="w-5 h-5 text-brand-600"></i>
+              <span>📁 اختيار صور أو PDF من الجهاز</span>
+            </button>
+          </div>
+
+          <!-- Hidden inputs -->
+          <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden" onchange="handleFileSelect(event)">
+          <input type="file" id="file-input" multiple accept="image/*,application/pdf" class="hidden" onchange="handleFileSelect(event)">
+
+          <!-- Drop Zone -->
+          <div id="drop-zone" onclick="document.getElementById('file-input').click()" class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-6 text-center hover:border-brand-500 dark:hover:border-brand-500 transition cursor-pointer bg-slate-50 dark:bg-slate-800/40">
+            <div class="flex flex-col items-center justify-center space-y-2">
+              <div class="w-12 h-12 rounded-full bg-brand-100 dark:bg-brand-900/40 text-brand-600 dark:text-brand-400 flex items-center justify-center">
+                <i data-lucide="upload-cloud" class="w-6 h-6"></i>
+              </div>
+              <p class="font-bold text-sm text-slate-700 dark:text-slate-300">أو اسحب وأفلت صور الصفحات هنا</p>
+              <p class="text-xs text-slate-500">يدعم: PNG, JPG, WEBP, PDF (يتم ضغط الصور تلقائياً لنقل سريع وفوري)</p>
+            </div>
+          </div>
+
+          <!-- Selected Files List -->
+          <div id="selected-files-list" class="mt-3 space-y-2"></div>
+        </div>
+
+        <!-- User Notes / Typed text -->
+        <div>
+          <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">ملاحظات إضافية أو كتابة نص يدوي (اختياري)</label>
+          <textarea id="upload-notes" rows="3" placeholder="يمكنك كتابة ملحوظاتك، أو التركيز على نقاط معينة، أو نسخ نص الصفحات هنا مباشرة..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none text-sm"></textarea>
+        </div>
+
+        <!-- Submit Button -->
+        <button id="upload-submit-btn" onclick="submitStudyMaterial()" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-700 hover:to-indigo-700 text-white font-bold shadow-lg shadow-brand-500/25 transition flex items-center justify-center gap-2">
+          <i data-lucide="sparkles" class="w-5 h-5"></i>
+          <span>تحليل الصفحات واستخراج الأسئلة بالذكاء الاصطناعي ⚡</span>
+        </button>
+
+      </div>
+
+      <!-- Processing Status Modal/Box -->
+      <div id="processing-box" class="hidden bg-white dark:bg-slate-900 rounded-2xl border border-brand-200 dark:border-brand-900 p-6 shadow-xl space-y-4 text-center">
+        <div class="inline-block animate-spin text-brand-600">
+          <i data-lucide="loader-2" class="w-10 h-10"></i>
+        </div>
+        <h3 id="processing-step" class="text-lg font-black text-slate-800 dark:text-white">جاري تحليل الصفحات وقراءة النصوص...</h3>
+        <p class="text-xs text-slate-500">يستخدم الذكاء الاصطناعي لمعالجة الصور وفهم محتوى المادة واستخراج الأسئلة</p>
+      </div>
+
+      <!-- Study Result Display (Summary + Questions) -->
+      <div id="study-result-box" class="hidden space-y-6">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+            <h3 class="text-lg font-black text-brand-600 dark:text-brand-400 flex items-center gap-2">
+              <i data-lucide="file-text" class="w-5 h-5"></i>
+              <span>الملخص التعليمي وأهم النقاط</span>
+            </h3>
+            <button onclick="startQuizWithLastMaterial()" class="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition">
+              <i data-lucide="play" class="w-4 h-4"></i>
+              <span>اختبرني في هذه الصفحات الآن</span>
+            </button>
+          </div>
+          <div id="material-summary-content" class="prose dark:prose-invert max-w-none text-sm text-slate-700 dark:text-slate-300 leading-relaxed"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 3: QUIZ MODE ("اختبرني") -->
+    <section id="view-quiz" class="tab-view hidden max-w-3xl mx-auto space-y-6">
+      
+      <!-- Quiz Setup Screen -->
+      <div id="quiz-setup-screen" class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
+        <div class="text-center space-y-2">
+          <div class="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 mx-auto flex items-center justify-center shadow-md">
+            <i data-lucide="sparkles" class="w-7 h-7"></i>
+          </div>
+          <h2 class="text-2xl font-black text-slate-900 dark:text-white">بدء اختبار تفاعلي</h2>
+          <p class="text-sm text-slate-500">اختر نوع الاختبار والمادة التي ترغب في تقييم حفظك وفهمك فيها</p>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">اختر الكتاب / المادة</label>
+            <select id="quiz-book-select" onchange="onQuizBookChange()" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
+              <option value="">-- اختر كتاباً --</option>
+            </select>
+            <div id="quiz-available-badge" class="mt-1 text-xs text-brand-600 dark:text-brand-400 font-bold"></div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">نوع ونطاق الاختبار</label>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label class="p-4 rounded-xl border-2 border-slate-200 dark:border-slate-800 hover:border-purple-500 cursor-pointer flex flex-col items-center text-center space-y-2 transition has-[:checked]:border-purple-500 has-[:checked]:bg-purple-50/50 dark:has-[:checked]:bg-purple-950/30">
+                <input type="radio" name="quiz-mode" value="fresh_ai" checked class="hidden">
+                <i data-lucide="sparkles" class="w-6 h-6 text-purple-500"></i>
+                <span class="font-bold text-sm">أسئلة جديدة متجددة 🌟</span>
+                <span class="text-xs text-slate-400">توليد صياغات وطرق طرح جديدة بالذكاء الاصطناعي</span>
+              </label>
+
+              <label class="p-4 rounded-xl border-2 border-slate-200 dark:border-slate-800 hover:border-brand-500 cursor-pointer flex flex-col items-center text-center space-y-2 transition has-[:checked]:border-brand-500 has-[:checked]:bg-brand-50/50 dark:has-[:checked]:bg-brand-950/30">
+                <input type="radio" name="quiz-mode" value="bank" class="hidden">
+                <i data-lucide="award" class="w-6 h-6 text-brand-500"></i>
+                <span class="font-bold text-sm">بنك أسئلة الكتاب المباشر</span>
+                <span class="text-xs text-slate-400">اختبار من الأسئلة المحفوظة بدقة مع خلط الترتيب</span>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">عدد الأسئلة</label>
+            <select id="quiz-count-select" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
+              <option value="3">3 أسئلة سريعة</option>
+              <option value="5" selected>5 أسئلة نموذجية</option>
+              <option value="10">10 أسئلة</option>
+              <option value="15">15 سؤال (اختبار كامل)</option>
+              <option value="20">20 سؤال (شامل ومكثف)</option>
+            </select>
+          </div>
+
+          <button id="btn-start-quiz" onclick="startQuiz()" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-brand-600 hover:from-amber-600 hover:to-brand-700 text-white font-black text-lg shadow-lg shadow-amber-500/25 transition flex items-center justify-center gap-2">
+            <i data-lucide="play" class="w-5 h-5"></i>
+            <span>ابدأ الاختبار الآن</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Submitting Overlay / Screen -->
+      <div id="quiz-submitting-screen" class="hidden py-20 text-center space-y-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 shadow-sm">
+        <div class="inline-block animate-spin text-brand-600">
+          <i data-lucide="loader-2" class="w-12 h-12"></i>
+        </div>
+        <h3 class="text-xl font-black text-slate-800 dark:text-white">جاري إعداد الاختبار بالذكاء الاصطناعي...</h3>
+        <p class="text-xs text-slate-400">لحظات وسيتم عرض الأسئلة</p>
+      </div>
+
+      <!-- Active Quiz Interface -->
+      <div id="quiz-active-screen" class="hidden space-y-6">
+        
+        <!-- Progress Header -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4 shadow-sm flex items-center justify-between">
+          <div>
+            <span id="quiz-active-title" class="text-xs font-bold text-brand-600 dark:text-brand-400">المادة</span>
+            <h3 class="text-base font-black text-slate-800 dark:text-white" id="quiz-counter-text">السؤال 1 من 5</h3>
+          </div>
+          <button onclick="confirmExitQuiz()" class="text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-3 py-1.5 rounded-lg transition">
+            إنهاء الاختبار
+          </button>
+        </div>
+
+        <!-- Progress Bar -->
+        <div class="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+          <div id="quiz-progress-bar" class="bg-gradient-to-r from-brand-600 to-emerald-500 h-full transition-all duration-300" style="width: 20%"></div>
+        </div>
+
+        <!-- Question Card -->
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 sm:p-8 shadow-sm space-y-6">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <div class="flex items-center gap-2">
+              <span id="quiz-question-type-badge" class="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                اختيار من متعدد
+              </span>
+              <button id="btn-rephrase-question" onclick="rephraseCurrentQuestion()" class="flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-300 border border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900 transition shadow-sm" title="تغيير صياغة أو طريقة طرح هذا السؤال عبر الذكاء الاصطناعي">
+                <i data-lucide="refresh-cw" class="w-3.5 h-3.5" id="rephrase-icon"></i>
+                <span id="rephrase-text">غيّر طريقة السؤال 🔀</span>
+              </button>
+            </div>
+          </div>
+
+          <h4 id="quiz-question-text" class="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-relaxed">
+            نص السؤال هنا؟
+          </h4>
+
+          <!-- Answers Container -->
+          <div id="quiz-options-container" class="space-y-3">
+            <!-- Injected via JS -->
+          </div>
+
+          <!-- Navigation Controls -->
+          <div class="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+            <button id="quiz-prev-btn" onclick="prevQuestion()" class="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 font-bold text-sm transition">
+              السابق
+            </button>
+            <button id="quiz-next-btn" onclick="nextQuestion()" class="px-6 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm shadow-md transition flex items-center gap-1.5">
+              <span>التالي</span>
+              <i data-lucide="chevron-left" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Quiz Results Screen -->
+      <div id="quiz-results-screen" class="hidden space-y-6">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 shadow-sm text-center space-y-4">
+          <div id="results-icon-wrap" class="w-20 h-20 rounded-full mx-auto flex items-center justify-center text-4xl shadow-xl">
+            🏆
+          </div>
+          <h3 id="results-headline" class="text-2xl font-black text-slate-900 dark:text-white">نتيجة الاختبار</h3>
+          <p id="results-subtext" class="text-sm text-slate-500">تم تقييم إجاباتك بنجاح وحفظها في سجلك الدراسي</p>
+          
+          <div class="inline-flex items-center justify-center gap-3 px-6 py-3 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700">
+            <span class="text-3xl font-black text-brand-600 dark:text-brand-400" id="results-score-percent">85%</span>
+            <div class="text-right text-xs">
+              <div class="font-bold text-slate-700 dark:text-slate-300" id="results-score-fraction">4 من 5 صحيحة</div>
+              <div class="text-slate-400" id="results-status-badge">إتقان ممتاز</div>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button onclick="retryWrongQuestions()" id="retry-wrong-btn" class="hidden px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow transition flex items-center gap-1.5">
+              <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+              <span>إعادة محاولة الأسئلة الخاطئة فقط 🔄</span>
+            </button>
+            <button onclick="resetQuizView()" class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm shadow transition">
+              اختبار جديد
+            </button>
+            <button onclick="switchTab('books')" class="px-5 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 font-bold text-sm hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+              العودة للكتب
+            </button>
+          </div>
+        </div>
+
+        <!-- Detailed Breakdown -->
+        <div class="space-y-4">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-200 dark:border-slate-800 pb-3">
+            <h4 class="font-black text-lg text-slate-800 dark:text-white">مراجعة كاملة لجميع الأسئلة وإجاباتك بالتفصيل</h4>
+            
+            <!-- Result Filter Tabs -->
+            <div class="inline-flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-bold">
+              <button onclick="filterResultsBreakdown('all')" id="filter-btn-all" class="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm transition">
+                الكل (<span id="count-filter-all">0</span>)
+              </button>
+              <button onclick="filterResultsBreakdown('wrong')" id="filter-btn-wrong" class="px-3 py-1.5 rounded-lg text-rose-600 hover:text-rose-700 transition">
+                الخاطئة ✗ (<span id="count-filter-wrong">0</span>)
+              </button>
+              <button onclick="filterResultsBreakdown('correct')" id="filter-btn-correct" class="px-3 py-1.5 rounded-lg text-emerald-600 hover:text-emerald-700 transition">
+                الصحيحة ✓ (<span id="count-filter-correct">0</span>)
+              </button>
+            </div>
+          </div>
+
+          <div id="results-breakdown-list" class="space-y-4">
+            <!-- Injected via JS -->
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- TAB 4: QUESTIONS BANK -->
+    <section id="view-bank" class="tab-view hidden space-y-6">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 class="text-2xl font-black text-slate-900 dark:text-white">بنك الأسئلة الدائم</h2>
+          <p class="text-sm text-slate-500 dark:text-slate-400">جميع الأسئلة المستخرجة من صفحات كتبك محفوظة هنا للمراجعة طوال العام</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <select id="bank-book-select" onchange="loadBankQuestions()" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold">
+            <option value="all">جميع المواد والكتب</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="bank-questions-list" class="space-y-3">
+        <!-- Injected via JS -->
+      </div>
+    </section>
+
+    <!-- TAB 5: STATS & HISTORY -->
+    <section id="view-stats" class="tab-view hidden space-y-6">
+      <div>
+        <h2 class="text-2xl font-black text-slate-900 dark:text-white">سجل الاختبارات والإنجاز</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400">تابع مستواك وتحصيلك العلمي وراجع نتائج اختباراتك السابقة بالكامل</p>
+      </div>
+
+      <!-- Stats Grid -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+          <div class="text-3xl font-black text-brand-600" id="stat-books-count">0</div>
+          <div class="text-xs font-bold text-slate-500 mt-1">الكتب والمواد</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+          <div class="text-3xl font-black text-emerald-600" id="stat-materials-count">0</div>
+          <div class="text-xs font-bold text-slate-500 mt-1">الجلسات والصفحات</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+          <div class="text-3xl font-black text-indigo-600" id="stat-questions-count">0</div>
+          <div class="text-xs font-bold text-slate-500 mt-1">الأسئلة المحفوظة</div>
+        </div>
+        <div class="bg-white dark:bg-slate-900 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-center">
+          <div class="text-3xl font-black text-amber-500" id="stat-avg-score">0%</div>
+          <div class="text-xs font-bold text-slate-500 mt-1">متوسط درجاتك</div>
+        </div>
+      </div>
+
+      <!-- History Table/List -->
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-6 shadow-sm space-y-4">
+        <h3 class="font-black text-lg text-slate-800 dark:text-white">سجل الاختبارات المكتملة</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-right text-xs">
+            <thead>
+              <tr class="border-b border-slate-200 dark:border-slate-800 text-slate-500 pb-2">
+                <th class="py-2.5 px-4">المادة</th>
+                <th class="py-2.5 px-4">التاريخ والوقت</th>
+                <th class="py-2.5 px-4">النتيجة</th>
+                <th class="py-2.5 px-4">النسبة</th>
+                <th class="py-2.5 px-4">الإجراء</th>
+              </tr>
+            </thead>
+            <tbody id="history-table-body">
+              <!-- Injected via JS -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL: ADD NEW BOOK -->
+  <div id="modal-new-book" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-5">
+      <div class="flex items-center justify-between">
+        <h3 class="text-xl font-black text-slate-900 dark:text-white">إضافة مادة أو كتاب جديد</h3>
+        <button onclick="closeNewBookModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">اسم الكتاب أو المادة <span class="text-rose-500">*</span></label>
+          <input type="text" id="new-book-name" placeholder="مثال: فقه المعاملات، صيانة الحاسوب، فيزياء..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">وصف مختصر أو التخصص</label>
+          <input type="text" id="new-book-desc" placeholder="مثال: الفصل الأول، منهج 2026..." class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none">
+        </div>
+
+        <div>
+          <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">لون البطاقة المميز</label>
+          <div class="flex items-center gap-3">
+            <input type="color" id="new-book-color" value="#2563eb" class="w-10 h-10 rounded-xl cursor-pointer border-0">
+            <span class="text-xs text-slate-500">اختر لوناً مميزاً للمادة</span>
+          </div>
+        </div>
+
+        <button onclick="submitNewBook(event)" class="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold shadow-lg shadow-brand-500/25 transition">
+          حفظ الكتاب
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: MOBILE CONNECT & 24/7 CLOUD LINK -->
+  <div id="modal-qr" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+            <i data-lucide="smartphone" class="w-5 h-5"></i>
+          </div>
+          <h3 class="text-lg font-black text-slate-900 dark:text-white">تطبيق الجوال السحابي 24/7</h3>
+        </div>
+        <button onclick="closeQrModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Quick APK Download Button -->
+      <a href="./study_assistant.apk" download="مساعد_الدراسة.apk" class="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold hover:brightness-105 transition shadow-lg shadow-emerald-500/20 group">
+        <div class="flex items-center gap-3">
+          <span class="p-2 bg-white/20 rounded-xl">
+            <i data-lucide="download" class="w-5 h-5"></i>
+          </span>
+          <div class="text-right">
+            <div class="text-sm font-black">تحميل تطبيق الأندرويد (.APK) المحدث</div>
+            <div class="text-[11px] text-emerald-100">تطبيق مستقل تماماً يعمل حتى والكمبيوتر مغلق</div>
+          </div>
+        </div>
+        <i data-lucide="arrow-left" class="w-4 h-4 group-hover:-translate-x-1 transition"></i>
+      </a>
+
+      <!-- Permanent Cloud Web Link -->
+      <div class="bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200/80 dark:border-indigo-800/80 p-4 rounded-2xl space-y-2">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-black text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            الرابط السحابي الدائم (يعمل دائماً من أي مكان)
+          </span>
+        </div>
+        <div class="bg-white/80 dark:bg-slate-900/80 p-3 rounded-xl break-all text-center">
+          <a href="https://ahmadherohot0-collab.github.io/study-assistant/" target="_blank" class="text-xs font-black text-brand-600 dark:text-brand-400 hover:underline block mb-2">
+            https://ahmadherohot0-collab.github.io/study-assistant/
+          </a>
+          <span class="text-[11px] text-slate-500 block">يمكنك فتح هذا الرابط في أي هاتف أو جهاز محمول أو لوحي وسيفتح فوراً</span>
+        </div>
+      </div>
+
+      <!-- Backup Notice -->
+      <div class="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-800 dark:text-amber-200 space-y-1">
+        <p class="font-bold">💾 النسخ الاحتياطي ونقل البيانات:</p>
+        <p class="text-[11px]">يمكنك الضغط على زر "نسخ احتياطي" في أعلى الصفحة لتحميل ملف يحتوي على كل كتبك وأسئلتك، واستعادته في أي وقت على أي جهاز آخر.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: PAST ATTEMPT DETAIL REVIEW -->
+  <div id="modal-history-detail" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+      <div class="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-black text-slate-900 dark:text-white" id="modal-history-title">تفاصيل الاختبار السابق</h3>
+          <p class="text-xs text-slate-400" id="modal-history-subtitle">عرض الأسئلة وإجاباتك المسجلة</p>
+        </div>
+        <button onclick="closeHistoryModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-4" id="modal-history-body">
+        <!-- Injected via JS -->
+      </div>
+
+      <div class="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 flex justify-end">
+        <button onclick="closeHistoryModal()" class="px-5 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-white font-bold text-xs hover:bg-slate-300 transition">
+          إغلاق
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- App Core Scripts: IndexedDB + Gemini AI + Main App -->
+  <script src="./db.js"></script>
+  <script src="./ai.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
