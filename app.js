@@ -152,11 +152,40 @@ function refreshIcons() {
     }
 }
 
-// Service Worker for PWA Offline Caching
+// Service Worker for PWA Offline Caching & Seamless Auto-Updates
 function registerServiceWorker() {
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js').catch(err => {
+        navigator.serviceWorker.register('./sw.js').then(reg => {
+            // Check for updates periodically and on focus
+            if (reg) {
+                reg.update().catch(() => {});
+                
+                reg.addEventListener('updatefound', () => {
+                    const newWorker = reg.installing;
+                    if (newWorker) {
+                        newWorker.addEventListener('statechange', () => {
+                            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+                                // New version detected! Inform user and apply seamlessly
+                                console.log('[Auto-Update] New version installed and ready.');
+                                if (typeof showToast === 'function') {
+                                    showToast('✨ تم تثبيت تحديث جديد تلقائياً!', 'success');
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        }).catch(err => {
             console.log('SW registration error:', err);
+        });
+
+        // Listen for controller changes to reload cleanly if needed
+        let refreshing = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (!refreshing) {
+                refreshing = true;
+                window.location.reload();
+            }
         });
     }
 }
