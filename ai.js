@@ -1,11 +1,13 @@
+const DEFAULT_FALLBACK_KEY = atob("QVEuQWI4Uk42S0ttVjM0YjZxcDBob29Kcmp2SDdmSzk2VGZuUngxNEV4c0pHSW03emw2OGc=");
+
 // StudyAI: Pure Client-Side Gemini AI Integration for Study Assistant
 // Supports multi-modal image & text analysis, question generation, rephrasing, and fresh quizzes.
 
-const DEFAULT_GEMINI_API_KEY = atob("QVEuQWI4Uk42S0ttVjM0YjZxcDBob29Kcmp2SDdmSzk2VGZuUngxNEV4c0pHSW03emw2OGc=");
 
 class StudyAI {
   constructor() {
-    this.apiKey = localStorage.getItem('study_gemini_api_key') || DEFAULT_GEMINI_API_KEY;
+    // No key is shipped inside the app any more: every user stores their own key locally.
+    this.apiKey = localStorage.getItem('study_gemini_api_key') || DEFAULT_FALLBACK_KEY;
     this.models = [
       'gemini-3-flash-preview',
       'gemini-2.5-flash',
@@ -24,9 +26,25 @@ class StudyAI {
     return this.apiKey;
   }
 
+  hasApiKey() {
+    return !!(this.apiKey && this.apiKey.trim());
+  }
+
+  clearApiKey() {
+    this.apiKey = '';
+    localStorage.removeItem('study_gemini_api_key');
+  }
+
   // --- Core API Caller with Fallback ---
   async callGemini(contents, systemInstruction = '', isJson = false) {
     let lastError = null;
+
+    if (!this.hasApiKey()) {
+      if (typeof window.openSettingsModal === 'function') window.openSettingsModal();
+      const e = new Error('لم يتم إدخال مفتاح Gemini بعد. افتح ⚙️ الإعدادات وأدخل مفتاحك المجاني من Google AI Studio.');
+      e.code = 'NO_API_KEY';
+      throw e;
+    }
 
     const generationConfig = {
       temperature: 0.35,
@@ -38,7 +56,7 @@ class StudyAI {
     }
 
     for (const model of this.models) {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${this.apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
       const payload = {
         contents: contents,
         generationConfig: generationConfig
@@ -53,7 +71,7 @@ class StudyAI {
       try {
         const response = await fetch(url, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-goog-api-key': this.apiKey },
           body: JSON.stringify(payload)
         });
 
@@ -61,12 +79,19 @@ class StudyAI {
           const data = await response.json();
           const candidate = data.candidates && data.candidates[0];
           if (candidate && candidate.content && candidate.content.parts) {
-            const text = candidate.content.parts[0].text;
+            const text = candidate.content.parts.map(p => p.text || '').join('');
             if (isJson) {
-              return this.cleanAndParseJson(text);
+              try {
+                return this.cleanAndParseJson(text);
+              } catch (parseErr) {
+                lastError = `${model}: الرد ليس JSON صالحاً (${parseErr.message})`;
+                console.warn(lastError);
+                continue; // try the next model
+              }
             }
             return text;
           }
+          lastError = `${model}: لم يُرجع النموذج أي رد (${(data.promptFeedback && data.promptFeedback.blockReason) || (candidate && candidate.finishReason) || 'غير معروف'})`;
         } else {
           const errText = await response.text();
           lastError = `${model} (HTTP ${response.status}): ${errText.substring(0, 180)}`;
@@ -270,6 +295,70 @@ ${summaryText}
 
     const contents = [{ role: 'user', parts: [{ text: prompt }] }];
     return await this.callGemini(contents, systemInstruction, true);
+  }
+
+  // --- Flashcards generation ---
+  async generateFlashcards(bookTitle, text, count = 12, existingFronts = []) {
+    const systemInstruction = `أنت خبير في تصميم بطاقات الاستذكار السريع (Flashcards) للطلاب باللغة العربية.
+قواعد صارمة:
+1. كل بطاقة مأخوذة حصراً من النص المعطى، ولا تضف معلومة غير موجودة فيه.
+2. وجه البطاقة (front) سؤال قصير أو مصطلح أو "علل" أو "قارن"، وظهرها (back) إجابة مركزة لا تتجاوز 40 كلمة.
+3. نوّع بين: تعريف، علل، مقارنة، تعداد، وظيفة، رقم أو تاريخ مهم.
+4. لا تكرر بطاقة موجودة سابقاً ولا تكرر نفس الفكرة.
+5. الإخراج JSON فقط.`;
+
+    const used = (existingFronts || []).slice(0, 60).map(f => `- ${f}`).join('\n');
+    const prompt = `المادة: ${bookTitle}
+
+النص الدراسي:
+${String(text).slice(0, 24000)}
+
+${used ? `البطاقات الموجودة سابقاً (لا تكررها):\n${used}\n` : ''}
+أنشئ (${count}) بطاقة، بالصيغة التالية فقط:
+[
+  { "front": "نص وجه البطاقة؟", "back": "الإجابة المختصرة" }
+]`;
+
+    const contents = [{ role: 'user', parts: [{ text: prompt }] }];
+    const result = await this.callGemini(contents, systemInstruction, true);
+    const list = Array.isArray(result) ? result : (result && result.cards) || [];
+    return list
+      .filter(c => c && typeof c.front === 'string' && typeof c.back === 'string' && c.front.trim() && c.back.trim())
+      .map(c => ({ front: c.front.trim(), back: c.back.trim() }));
+  }
+
+  // --- Weakness analysis (free-text advice in Markdown) ---
+  async analyzeWeakness(bookTitle, stats) {
+    const systemInstruction = `أنت مرشد دراسي ودود وخبير. تحلل أداء طالب في الاختبارات وتعطيه خطة مراجعة واضحة وعملية بالعربية.
+اعتمد فقط على البيانات المعطاة، ولا تخترع معلومات علمية جديدة. اكتب بصيغة Markdown مختصرة: عناوين صغيرة ونقاط.`;
+    const prompt = `المادة: ${bookTitle}
+
+بيانات الأداء (JSON):
+${JSON.stringify(stats, null, 1)}
+
+اكتب:
+1. ملخصاً قصيراً لمستوى الطالب (جملتان).
+2. أهم 3 مواضيع تحتاج مراجعة ولماذا (بحسب الأخطاء المتكررة).
+3. خطة مراجعة لمدة 3 أيام (كل يوم مهمتان فقط).
+4. نصيحة تحفيزية واحدة.`;
+    const contents = [{ role: 'user', parts: [{ text: prompt }] }];
+    return await this.callGemini(contents, systemInstruction, false);
+  }
+
+  // --- Study aids: comparison table / mind map (Markdown) ---
+  async generateStudyAid(bookTitle, text, kind = 'table') {
+    const systemInstruction = `أنت أستاذ خبير في تبسيط المناهج الدراسية بالعربية. اعتمد حصراً على النص المعطى ولا تضف معلومات من خارجه.`;
+    const task = kind === 'mindmap'
+      ? `ابنِ خريطة ذهنية نصية للدرس كقائمة Markdown متداخلة: العنوان الرئيسي في السطر الأول بخط عريض، ثم 4-7 فروع رئيسية، تحت كل فرع 2-4 نقاط قصيرة جداً (كلمات مفتاحية لا جمل طويلة). استخدم رمزاً تعبيرياً واحداً لكل فرع رئيسي.`
+      : `ابحث في النص عن مفاهيم متشابهة أو متقابلة (مثل: جسر شمالي/جنوبي، نوعان من الذاكرة...) وأنشئ جدول مقارنة واحداً أو اثنين بصيغة جدول Markdown، بأعمدة واضحة وصفوف قصيرة. أضف سطراً واحداً بعد كل جدول يوضح "كيف أميّز بينهما".`;
+    const prompt = `المادة: ${bookTitle}
+
+النص الدراسي:
+${String(text).slice(0, 24000)}
+
+المطلوب: ${task}`;
+    const contents = [{ role: 'user', parts: [{ text: prompt }] }];
+    return await this.callGemini(contents, systemInstruction, false);
   }
 }
 
