@@ -6,7 +6,7 @@ const INITIAL_SEED_DATA = [{"book": {"id": 3, "name": "صيانة الحاسوب
 class StudyDB {
   constructor() {
     this.dbName = 'StudyAssistantDB';
-    this.version = 1;
+    this.version = 2;
     this.db = null;
     this.initPromise = this.init();
   }
@@ -47,6 +47,13 @@ class StudyDB {
         // Settings store
         if (!db.objectStoreNames.contains('settings')) {
           db.createObjectStore('settings', { keyPath: 'key' });
+        }
+
+        // Flashcards store (added in DB v2 - spaced repetition / Leitner boxes)
+        if (!db.objectStoreNames.contains('flashcards')) {
+          const fStore = db.createObjectStore('flashcards', { keyPath: 'id', autoIncrement: true });
+          fStore.createIndex('book_id', 'book_id', { unique: false });
+          fStore.createIndex('due', 'due', { unique: false });
         }
       };
 
@@ -194,7 +201,7 @@ class StudyDB {
     await this.initPromise;
     id = Number(id);
     return new Promise((resolve, reject) => {
-      const tx = this.db.transaction(['books', 'materials', 'questions', 'history'], 'readwrite');
+      const tx = this.db.transaction(['books', 'materials', 'questions', 'history', 'flashcards'], 'readwrite');
       tx.objectStore('books').delete(id);
 
       // Cascading deletes
@@ -213,6 +220,16 @@ class StudyDB {
       const qIndex = qStore.index('book_id');
       const qReq = qIndex.openCursor(IDBKeyRange.only(id));
       qReq.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (cursor) {
+          cursor.delete();
+          cursor.continue();
+        }
+      };
+
+      const fStore = tx.objectStore('flashcards');
+      const fReq = fStore.index('book_id').openCursor(IDBKeyRange.only(id));
+      fReq.onsuccess = (e) => {
         const cursor = e.target.result;
         if (cursor) {
           cursor.delete();
@@ -358,6 +375,76 @@ class StudyDB {
     });
   }
 
+  // --- Flashcards (Leitner spaced repetition) ---
+  async addFlashcards(list) {
+    await this.initPromise;
+    const now = Date.now();
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('flashcards', 'readwrite');
+      const store = tx.objectStore('flashcards');
+      let added = 0;
+      for (const c of (list || [])) {
+        if (!c || !c.front || !c.back) continue;
+        store.add({
+          book_id: Number(c.book_id),
+          material_id: Number(c.material_id || 0),
+          front: String(c.front).trim(),
+          back: String(c.back).trim(),
+          box: Number(c.box || 0),
+          due: Number(c.due || now),
+          reviews: Number(c.reviews || 0),
+          lapses: Number(c.lapses || 0),
+          created_at: c.created_at || new Date().toISOString()
+        });
+        added++;
+      }
+      tx.oncomplete = () => resolve(added);
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  // bookId = null/0 returns the cards of every book
+  async getFlashcards(bookId) {
+    await this.initPromise;
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('flashcards', 'readonly');
+      const store = tx.objectStore('flashcards');
+      const req = bookId
+        ? store.index('book_id').getAll(IDBKeyRange.only(Number(bookId)))
+        : store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async updateFlashcard(id, updates) {
+    await this.initPromise;
+    id = Number(id);
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('flashcards', 'readwrite');
+      const store = tx.objectStore('flashcards');
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+        if (!getReq.result) return resolve(false);
+        const putReq = store.put(Object.assign(getReq.result, updates));
+        putReq.onsuccess = () => resolve(true);
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
+  }
+
+  async deleteFlashcard(id) {
+    await this.initPromise;
+    id = Number(id);
+    return new Promise((resolve, reject) => {
+      const tx = this.db.transaction('flashcards', 'readwrite');
+      const req = tx.objectStore('flashcards').delete(id);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
   // --- Quiz History ---
   async addHistory(historyItem) {
     await this.initPromise;
@@ -438,11 +525,13 @@ class StudyDB {
       });
     }
     const history = await this.getHistory();
+    const flashcards = await this.getFlashcards(0);
     return {
-      version: 1,
+      version: 2,
       exported_at: new Date().toISOString(),
       books_data: backup,
-      history: history
+      history: history,
+      flashcards: flashcards
     };
   }
 
@@ -450,7 +539,9 @@ class StudyDB {
     await this.initPromise;
     if (!data) return false;
     const booksData = data.books_data || (Array.isArray(data) ? data : []);
-    
+    const bookIdMap = {};   // old book id -> new book id
+    const allMatIdMap = {}; // old material id -> new material id
+
     for (const item of booksData) {
       if (!item.book) continue;
       const newBookId = await this.addBook({
@@ -459,6 +550,7 @@ class StudyDB {
         icon: item.book.icon || 'book',
         color: item.book.color || '#3b82f6'
       });
+      bookIdMap[item.book.id] = newBookId;
 
       const matIdMap = {};
       if (item.materials) {
@@ -473,6 +565,7 @@ class StudyDB {
             files_json: mat.files_json || '[]'
           });
           matIdMap[mat.id] = newMatId;
+          allMatIdMap[mat.id] = newMatId;
         }
       }
 
@@ -490,7 +583,9 @@ class StudyDB {
             options: options,
             correct_answer: q.correct_answer,
             explanation: q.explanation || '',
-            difficulty: q.difficulty || 'medium'
+            difficulty: q.difficulty || 'medium',
+            times_tested: q.times_tested || 0,
+            times_correct: q.times_correct || 0
           });
         }
       }
@@ -498,8 +593,20 @@ class StudyDB {
 
     if (data.history && Array.isArray(data.history)) {
       for (const h of data.history) {
-        await this.addHistory(h);
+        // history rows belong to a book: re-point them at the newly created book
+        const mapped = bookIdMap[h.book_id];
+        await this.addHistory(Object.assign({}, h, { book_id: mapped || h.book_id }));
       }
+    }
+
+    if (data.flashcards && Array.isArray(data.flashcards)) {
+      const cards = data.flashcards
+        .filter(c => bookIdMap[c.book_id])
+        .map(c => Object.assign({}, c, {
+          book_id: bookIdMap[c.book_id],
+          material_id: allMatIdMap[c.material_id] || 0
+        }));
+      await this.addFlashcards(cards);
     }
 
     return true;
