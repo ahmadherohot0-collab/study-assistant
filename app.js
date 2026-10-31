@@ -1,6 +1,42 @@
 // Smart Study Assistant - Standalone Web & Android Client
 // Powered by IndexedDB and Gemini 3 Flash AI - Works 100% 24/7 without PC
 
+// --- Shared helpers ---
+function escapeHtml(value) {
+    return String(value === undefined || value === null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Markdown -> sanitized HTML (AI output is untrusted: it may come from text inside photographed pages)
+function safeMarkdown(md) {
+    const text = String(md || '');
+    if (window.marked && window.DOMPurify) {
+        return DOMPurify.sanitize(marked.parse(text));
+    }
+    return '<div style="white-space:pre-wrap">' + escapeHtml(text) + '</div>';
+}
+
+function showToast(msg, kind = 'info') {
+    let host = document.getElementById('toast-host');
+    if (!host) {
+        host = document.createElement('div');
+        host.id = 'toast-host';
+        host.className = 'fixed bottom-4 inset-x-0 z-[60] flex flex-col items-center gap-2 pointer-events-none px-4';
+        document.body.appendChild(host);
+    }
+    const colors = { info: 'bg-slate-900 text-white', success: 'bg-emerald-600 text-white', error: 'bg-rose-600 text-white', warn: 'bg-amber-500 text-white' };
+    const el = document.createElement('div');
+    el.className = 'pointer-events-auto px-4 py-2.5 rounded-xl shadow-lg text-sm font-bold max-w-md text-center ' + (colors[kind] || colors.info);
+    el.textContent = msg;
+    host.appendChild(el);
+    setTimeout(() => {
+        el.style.transition = 'opacity .3s';
+        el.style.opacity = '0';
+        setTimeout(() => el.remove(), 300);
+    }, 3200);
+}
+
 // State Management
 let currentTab = 'books';
 let booksList = [];
@@ -185,10 +221,15 @@ function switchTab(tabId) {
         activeBtn.classList.add('text-brand-600', 'dark:text-brand-400', 'bg-brand-50', 'dark:bg-brand-950/50');
     }
 
+    // Stop any speech when leaving a tab
+    if (window.stopSpeech) window.stopSpeech();
+
     // Load data specific to tab
     if (tabId === 'books') loadBooks();
     if (tabId === 'bank') loadBankQuestions();
     if (tabId === 'stats') loadStats();
+    if (tabId === 'flash' && window.Flash) Flash.onShow();
+    if (tabId === 'insights' && window.Insights) Insights.onShow();
     refreshIcons();
 }
 
@@ -236,12 +277,12 @@ function renderBooksGrid(books) {
                     <div class="w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-md" style="background-color: ${book.color || '#3b82f6'}">
                         <i data-lucide="${book.icon || 'book'}" class="w-6 h-6"></i>
                     </div>
-                    <button onclick="deleteBook(${book.id}, '${book.name}')" class="text-slate-400 hover:text-rose-500 p-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition" title="حذف المادة">
+                    <button onclick="deleteBook(${book.id})" class="text-slate-400 hover:text-rose-500 p-2 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition" title="حذف المادة">
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                 </div>
-                <h3 class="text-base font-black text-slate-900 dark:text-white mb-1.5 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition">${book.name}</h3>
-                <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">${book.description || 'لا يوجد وصف للمادة'}</p>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mb-1.5 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition">${escapeHtml(book.name)}</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">${escapeHtml(book.description || 'لا يوجد وصف للمادة')}</p>
             </div>
 
             <div class="pt-4 border-t border-slate-100 dark:border-slate-800/80 flex flex-col gap-3">
@@ -265,6 +306,10 @@ function renderBooksGrid(books) {
                         <span>بدء اختبار</span>
                     </button>
                 </div>
+                <button onclick="openSummaries(${book.id})" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold transition flex items-center justify-center gap-1.5">
+                    <i data-lucide="book-open-text" class="w-3.5 h-3.5"></i>
+                    <span>الملخصات · استماع · خرائط ذهنية</span>
+                </button>
             </div>
         `;
         grid.appendChild(card);
@@ -273,7 +318,7 @@ function renderBooksGrid(books) {
 }
 
 function updateBookSelects(books) {
-    const selects = ['upload-book-select', 'quiz-book-select', 'bank-book-select'];
+    const selects = ['upload-book-select', 'quiz-book-select', 'bank-book-select', 'flash-book-select', 'insights-book-select'];
     selects.forEach(selectId => {
         const el = document.getElementById(selectId);
         if (!el) return;
@@ -356,6 +401,10 @@ async function submitNewBook(e) {
 }
 
 async function deleteBook(bookId, bookName) {
+    if (!bookName) {
+        const found = booksList.find(b => b.id == bookId);
+        bookName = found ? found.name : '';
+    }
     if (!confirm(`هل أنت متأكد من حذف المادة "${bookName}" وكافة ملخصاتها وأسئلتها؟`)) {
         return;
     }
@@ -467,6 +516,7 @@ async function submitStudyMaterial() {
 
         lastUploadedMaterial = {
             id: newMaterialId,
+            book_id: Number(bookId),
             title: title,
             summary: aiResult.summary,
             questions_count: questions.length
@@ -489,11 +539,7 @@ async function submitStudyMaterial() {
             resultBox.classList.remove('hidden');
             const summaryContent = document.getElementById('material-summary-content');
             if (summaryContent) {
-                if (window.marked) {
-                    summaryContent.innerHTML = marked.parse(aiResult.summary || '');
-                } else {
-                    summaryContent.innerText = aiResult.summary || '';
-                }
+                summaryContent.innerHTML = safeMarkdown(aiResult.summary || '');
             }
             resultBox.scrollIntoView({ behavior: 'smooth' });
         }
@@ -612,6 +658,7 @@ async function startQuiz() {
         if (activeTitle) activeTitle.innerText = `${bookName} (${isFreshAI ? 'أسئلة متجددة 🌟' : 'بنك الأسئلة'})`;
 
         renderActiveQuestion();
+        if (window.QuizTimer) QuizTimer.start(quizQuestions.length);
 
     } catch (err) {
         console.error('Quiz start error:', err);
@@ -645,6 +692,10 @@ function renderActiveQuestion() {
     const currentSelected = userAnswers[currentQuestionIndex];
 
     const options = q.options || [];
+    if (options.length === 0 && window.renderOpenQuestion) {
+        window.renderOpenQuestion(q, optionsContainer, currentSelected);
+    }
+
     options.forEach((optText, optIdx) => {
         const isSelected = currentSelected === optText;
         const btn = document.createElement('button');
@@ -663,12 +714,14 @@ function renderActiveQuestion() {
                         ? 'bg-brand-600 text-white'
                         : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
                 }">${letter}</span>
-                <span>${optText}</span>
+                <span>${escapeHtml(optText)}</span>
             </div>
             ${isSelected ? '<i data-lucide="check-circle-2" class="w-5 h-5 text-brand-600 shrink-0"></i>' : ''}
         `;
         optionsContainer.appendChild(btn);
     });
+
+    if (window.onQuestionRendered) window.onQuestionRendered(q);
 
     // Prev / Next buttons
     const prevBtn = document.getElementById('quiz-prev-btn');
@@ -757,6 +810,7 @@ async function rephraseCurrentQuestion() {
 // --- Submit Quiz & Detailed Breakdown Review ---
 async function submitQuizAnswers() {
     if (!currentQuiz) return;
+    if (window.QuizTimer) QuizTimer.stop();
 
     const questions = currentQuiz.questions;
     let correctCount = 0;
@@ -778,6 +832,8 @@ async function submitQuizAnswers() {
         details.push({
             question_id: q.id || idx,
             question: q.question,
+            material_id: q.material_id || 0,
+            options: Array.isArray(q.options) ? q.options : [],
             user_answer: userChoice,
             correct_answer: q.correct_answer,
             is_correct: isCorrect,
@@ -864,6 +920,7 @@ function showQuizResults(result) {
 
     activeResultsFilter = 'all';
     filterResultsBreakdown('all');
+    if (window.onQuizResultsShown) window.onQuizResultsShown(result);
     refreshIcons();
 }
 
@@ -933,7 +990,7 @@ function renderResultsBreakdownList() {
                 </div>
             </div>
 
-            <h4 class="text-sm font-black text-slate-900 dark:text-white mb-3.5 leading-relaxed">${item.question}</h4>
+            <h4 class="text-sm font-black text-slate-900 dark:text-white mb-3.5 leading-relaxed">${escapeHtml(item.question)}</h4>
 
             <div class="space-y-2 mb-3.5 text-xs font-bold">
                 <div class="p-3 rounded-xl flex items-center justify-between ${
@@ -942,13 +999,13 @@ function renderResultsBreakdownList() {
                         : 'bg-rose-100/70 dark:bg-rose-900/40 text-rose-900 dark:text-rose-200 border border-rose-300 dark:border-rose-700'
                 }">
                     <span class="text-slate-500 dark:text-slate-400">إجابتك:</span>
-                    <span class="font-black">${item.user_answer}</span>
+                    <span class="font-black">${escapeHtml(item.user_answer)}</span>
                 </div>
 
                 ${!item.is_correct ? `
                     <div class="p-3 rounded-xl flex items-center justify-between bg-emerald-100/70 dark:bg-emerald-900/40 text-emerald-900 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-700">
                         <span class="text-emerald-700 dark:text-emerald-400">الإجابة الصحيحة:</span>
-                        <span class="font-black">${item.correct_answer}</span>
+                        <span class="font-black">${escapeHtml(item.correct_answer)}</span>
                     </div>
                 ` : ''}
             </div>
@@ -959,7 +1016,7 @@ function renderResultsBreakdownList() {
                         <i data-lucide="lightbulb" class="w-3.5 h-3.5 text-amber-500"></i>
                         <span>التوضيح والشرح من نص المادة:</span>
                     </div>
-                    ${item.explanation}
+                    ${escapeHtml(item.explanation)}
                 </div>
             ` : ''}
         `;
@@ -980,7 +1037,7 @@ function retryWrongQuestions() {
         }
         return orig || {
             question: w.question,
-            options: [w.correct_answer, w.user_answer, 'خيار إضافي', 'خيار آخر'],
+            options: Array.isArray(w.options) ? [...w.options] : [],
             correct_answer: w.correct_answer,
             explanation: w.explanation
         };
@@ -999,9 +1056,11 @@ function retryWrongQuestions() {
     document.getElementById('quiz-results-screen').classList.add('hidden');
     document.getElementById('quiz-active-screen').classList.remove('hidden');
     renderActiveQuestion();
+    if (window.QuizTimer) QuizTimer.start(subQuestions.length);
 }
 
 function resetQuizView() {
+    if (window.QuizTimer) QuizTimer.stop();
     currentQuiz = null;
     userAnswers = {};
     document.getElementById('quiz-active-screen').classList.add('hidden');
@@ -1014,6 +1073,27 @@ function confirmExitQuiz() {
     if (confirm('هل أنت متأكد من الخروج من الاختبار الحالي؟')) {
         resetQuizView();
     }
+}
+
+// Start a quiz from an explicit list of questions (e.g. "focus on my weak points")
+function startCustomQuiz(bookId, bookName, questions, label) {
+    if (!questions || questions.length === 0) return;
+    currentQuiz = { book_id: bookId, book_name: bookName, questions: questions, is_fresh: false };
+    currentQuestionIndex = 0;
+    userAnswers = {};
+
+    switchTab('quiz');
+    ['quiz-setup-screen', 'quiz-submitting-screen', 'quiz-results-screen'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+    });
+    document.getElementById('quiz-active-screen').classList.remove('hidden');
+
+    const activeTitle = document.getElementById('quiz-active-title');
+    if (activeTitle) activeTitle.innerText = `${bookName} (${label || 'اختبار مخصص'})`;
+
+    renderActiveQuestion();
+    if (window.QuizTimer) QuizTimer.start(questions.length);
 }
 
 // --- Question Bank ---
@@ -1072,7 +1152,7 @@ function renderBankQuestions(questions) {
                         ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
                         : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
                 }">
-                    <span>${opt}</span>
+                    <span>${escapeHtml(opt)}</span>
                     ${isCorrect ? '<span class="text-[11px] font-black text-emerald-600">✓ إجابة صحيحة</span>' : ''}
                 </div>
             `;
@@ -1082,14 +1162,14 @@ function renderBankQuestions(questions) {
             <div class="flex items-start justify-between gap-3">
                 <div class="flex items-center gap-2">
                     <span class="px-2.5 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 text-xs font-black">#${idx + 1}</span>
-                    <span class="text-xs text-slate-400">${q.book_name || ''}</span>
+                    <span class="text-xs text-slate-400">${escapeHtml(q.book_name || '')}</span>
                 </div>
                 <button onclick="deleteQuestion(${q.id})" class="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">
                     <i data-lucide="trash-2" class="w-4 h-4"></i>
                 </button>
             </div>
 
-            <h4 class="text-sm font-black text-slate-900 dark:text-white leading-relaxed">${q.question}</h4>
+            <h4 class="text-sm font-black text-slate-900 dark:text-white leading-relaxed">${escapeHtml(q.question)}</h4>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 ${optionsHtml}
@@ -1097,7 +1177,7 @@ function renderBankQuestions(questions) {
 
             ${q.explanation ? `
                 <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                    <span class="font-bold text-slate-700 dark:text-slate-300">💡 التوضيح: </span>${q.explanation}
+                    <span class="font-bold text-slate-700 dark:text-slate-300">💡 التوضيح: </span>${escapeHtml(q.explanation)}
                 </div>
             ` : ''}
         `;
@@ -1169,7 +1249,7 @@ function renderHistoryTable(historyList) {
         }) : '';
 
         tr.innerHTML = `
-            <td class="py-3 px-4 font-bold text-slate-800 dark:text-slate-200">${h.book_name || 'مادة دراسية'}</td>
+            <td class="py-3 px-4 font-bold text-slate-800 dark:text-slate-200">${escapeHtml(h.book_name || 'مادة دراسية')}</td>
             <td class="py-3 px-4 text-slate-500">${dateStr}</td>
             <td class="py-3 px-4 font-bold">${h.correct_answers} / ${h.total_questions}</td>
             <td class="py-3 px-4">
@@ -1216,16 +1296,16 @@ async function viewHistoryDetail(historyId) {
             }`;
             card.innerHTML = `
                 <div class="flex items-center justify-between font-bold">
-                    <span>السؤال ${idx + 1}: ${d.question}</span>
+                    <span>السؤال ${idx + 1}: ${escapeHtml(d.question)}</span>
                     <span class="px-2 py-0.5 rounded-full text-[11px] ${
                         d.is_correct ? 'bg-emerald-200 text-emerald-800' : 'bg-rose-200 text-rose-800'
                     }">${d.is_correct ? 'صحيح ✓' : 'خطأ ✗'}</span>
                 </div>
                 <div class="text-slate-600 dark:text-slate-300">
-                    <div>إجابتك: <b class="${d.is_correct ? 'text-emerald-600' : 'text-rose-600'}">${d.user_answer}</b></div>
-                    ${!d.is_correct ? `<div>الإجابة الصحيحة: <b class="text-emerald-600">${d.correct_answer}</b></div>` : ''}
+                    <div>إجابتك: <b class="${d.is_correct ? 'text-emerald-600' : 'text-rose-600'}">${escapeHtml(d.user_answer)}</b></div>
+                    ${!d.is_correct ? `<div>الإجابة الصحيحة: <b class="text-emerald-600">${escapeHtml(d.correct_answer)}</b></div>` : ''}
                 </div>
-                ${d.explanation ? `<div class="text-slate-500 text-[11px] border-t border-slate-200 dark:border-slate-700 pt-1">💡 ${d.explanation}</div>` : ''}
+                ${d.explanation ? `<div class="text-slate-500 text-[11px] border-t border-slate-200 dark:border-slate-700 pt-1">💡 ${escapeHtml(d.explanation)}</div>` : ''}
             `;
             container.appendChild(card);
         });
