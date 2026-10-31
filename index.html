@@ -46,6 +46,8 @@
   <script src="https://unpkg.com/lucide@latest"></script>
   <!-- Marked for markdown parsing -->
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- DOMPurify: sanitizes AI-generated Markdown before it is shown -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
 
   <style>
     :root {
@@ -71,6 +73,30 @@
       border-radius: 9999px;
     }
     [v-cloak] { display: none; }
+
+    /* Flashcards: 3D flip */
+    .flip-card { perspective: 1200px; }
+    .flip-inner { position: relative; height: 18rem; transition: transform .5s; transform-style: preserve-3d; }
+    .flip-card.flipped .flip-inner { transform: rotateY(180deg); }
+    .flip-face { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden;
+      display: flex; flex-direction: column; padding: 1.5rem; border-radius: 1.25rem; overflow: auto; text-align: center; }
+    .flip-face > .flip-text { margin: auto 0; }
+    .flip-back { transform: rotateY(180deg); }
+
+    /* Rendered Markdown (Tailwind's reset removes list/table styles) */
+    .md-body h1, .md-body h2, .md-body h3, .md-body h4 { font-weight: 900; margin: 1rem 0 .5rem; line-height: 1.5; }
+    .md-body h1 { font-size: 1.25rem; } .md-body h2 { font-size: 1.125rem; } .md-body h3 { font-size: 1rem; } .md-body h4 { font-size: .95rem; }
+    .md-body p { margin: .5rem 0; }
+    .md-body ul { list-style: disc; padding-inline-start: 1.4rem; margin: .5rem 0; }
+    .md-body ol { list-style: decimal; padding-inline-start: 1.4rem; margin: .5rem 0; }
+    .md-body ul ul { list-style: circle; }
+    .md-body li { margin: .2rem 0; }
+    .md-body table { width: 100%; border-collapse: collapse; margin: .75rem 0; font-size: .85em; }
+    .md-body th, .md-body td { border: 1px solid rgba(100,116,139,.35); padding: .4rem .6rem; text-align: right; }
+    .md-body th { background: rgba(100,116,139,.12); font-weight: 800; }
+    .md-body blockquote { border-inline-start: 3px solid #3b82f6; padding: .2rem .8rem; margin: .6rem 0; opacity: .9; }
+    .md-body code { background: rgba(100,116,139,.15); padding: .05rem .3rem; border-radius: .3rem; }
+    .md-body strong { font-weight: 800; }
   </style>
 </head>
 <body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 min-h-screen flex flex-col transition-colors duration-200">
@@ -94,7 +120,11 @@
                 سحابي ومستقل 24/7 ⚡
               </span>
             </div>
-            <p class="text-[11px] text-slate-500 dark:text-slate-400">استخراج أسئلة ومراجعات شاملة</p>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <span>استخراج أسئلة ومراجعات شاملة</span>
+              <span class="text-slate-300 dark:text-slate-600">•</span>
+              <span class="text-indigo-600 dark:text-indigo-400 font-bold">تصميم: أحمد هيرو ✨</span>
+            </p>
           </div>
         </div>
 
@@ -115,6 +145,11 @@
           <button onclick="openQrModal()" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 text-xs font-bold hover:bg-indigo-100 dark:hover:bg-indigo-900 transition">
             <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
             <span class="text-[11px]">الجوال 📱</span>
+          </button>
+
+          <!-- Settings (Gemini key, speech) -->
+          <button onclick="openSettingsModal()" class="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 transition" title="الإعدادات">
+            <i data-lucide="settings" class="w-4 h-4"></i>
           </button>
 
           <!-- Dark/Light Mode Toggle -->
@@ -142,9 +177,19 @@
           <span>اختبرني الآن</span>
         </button>
 
+        <button onclick="switchTab('flash')" id="tab-btn-flash" class="nav-tab px-4 py-2.5 rounded-lg flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition whitespace-nowrap">
+          <i data-lucide="layers" class="w-4 h-4 text-amber-500"></i>
+          <span>البطاقات</span>
+        </button>
+
         <button onclick="switchTab('bank')" id="tab-btn-bank" class="nav-tab px-4 py-2.5 rounded-lg flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition whitespace-nowrap">
           <i data-lucide="help-circle" class="w-4 h-4"></i>
           <span>بنك الأسئلة</span>
+        </button>
+
+        <button onclick="switchTab('insights')" id="tab-btn-insights" class="nav-tab px-4 py-2.5 rounded-lg flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition whitespace-nowrap">
+          <i data-lucide="target" class="w-4 h-4 text-rose-500"></i>
+          <span>نقاط الضعف</span>
         </button>
 
         <button onclick="switchTab('stats')" id="tab-btn-stats" class="nav-tab px-4 py-2.5 rounded-lg flex items-center gap-2 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition whitespace-nowrap">
@@ -284,12 +329,20 @@
               <i data-lucide="file-text" class="w-5 h-5"></i>
               <span>الملخص التعليمي وأهم النقاط</span>
             </h3>
+            <div class="flex flex-wrap gap-2">
+            <button onclick="speakSummaryFromResult(this)" class="px-4 py-1.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition">
+              <span>🔊 استمع للملخص</span>
+            </button>
+            <button onclick="makeFlashcardsFromLastMaterial(this)" class="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs flex items-center gap-1.5 shadow-md transition">
+              <span>🃏 حوّله لبطاقات</span>
+            </button>
             <button onclick="startQuizWithLastMaterial()" class="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-emerald-600/20 transition">
               <i data-lucide="play" class="w-4 h-4"></i>
               <span>اختبرني في هذه الصفحات الآن</span>
             </button>
+            </div>
           </div>
-          <div id="material-summary-content" class="prose dark:prose-invert max-w-none text-sm text-slate-700 dark:text-slate-300 leading-relaxed"></div>
+          <div id="material-summary-content" class="md-body prose dark:prose-invert max-w-none text-sm text-slate-700 dark:text-slate-300 leading-relaxed"></div>
         </div>
       </div>
     </section>
@@ -346,6 +399,18 @@
             </select>
           </div>
 
+          <div>
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">⏱️ مؤقت الاختبار (محاكاة الامتحان)</label>
+            <select id="quiz-timer-select" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
+              <option value="0" selected>بدون مؤقت</option>
+              <option value="30">30 ثانية لكل سؤال (سريع)</option>
+              <option value="60">دقيقة لكل سؤال (امتحان)</option>
+              <option value="90">دقيقة ونصف لكل سؤال (مريح)</option>
+              <option value="120">دقيقتان لكل سؤال (للأسئلة الكتابية)</option>
+            </select>
+            <p class="mt-1 text-[11px] text-slate-400">عند انتهاء الوقت يُسلَّم الاختبار تلقائياً بما أجبت عليه.</p>
+          </div>
+
           <button id="btn-start-quiz" onclick="startQuiz()" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-brand-600 hover:from-amber-600 hover:to-brand-700 text-white font-black text-lg shadow-lg shadow-amber-500/25 transition flex items-center justify-center gap-2">
             <i data-lucide="play" class="w-5 h-5"></i>
             <span>ابدأ الاختبار الآن</span>
@@ -370,6 +435,10 @@
           <div>
             <span id="quiz-active-title" class="text-xs font-bold text-brand-600 dark:text-brand-400">المادة</span>
             <h3 class="text-base font-black text-slate-800 dark:text-white" id="quiz-counter-text">السؤال 1 من 5</h3>
+          </div>
+          <div id="quiz-timer" class="hidden items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-black text-sm tabular-nums transition-colors flex">
+            <i data-lucide="timer" class="w-4 h-4"></i>
+            <span id="quiz-timer-text">00:00</span>
           </div>
           <button onclick="confirmExitQuiz()" class="text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-3 py-1.5 rounded-lg transition">
             إنهاء الاختبار
@@ -439,6 +508,9 @@
             <button onclick="retryWrongQuestions()" id="retry-wrong-btn" class="hidden px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow transition flex items-center gap-1.5">
               <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
               <span>إعادة محاولة الأسئلة الخاطئة فقط 🔄</span>
+            </button>
+            <button onclick="Flash.fromWrongAnswers()" id="wrong-to-cards-btn" class="hidden px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm shadow transition flex items-center gap-1.5">
+              <span>🃏 حوّل أخطائي إلى بطاقات مراجعة</span>
             </button>
             <button onclick="resetQuizView()" class="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm shadow transition">
               اختبار جديد
@@ -544,7 +616,126 @@
       </div>
     </section>
 
+    <!-- TAB: FLASHCARDS -->
+    <section id="view-flash" class="tab-view hidden max-w-3xl mx-auto space-y-6">
+      <div class="text-center space-y-2">
+        <div class="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950/60 mx-auto flex items-center justify-center shadow-md text-2xl">🃏</div>
+        <h2 class="text-2xl font-black text-slate-900 dark:text-white">البطاقات التعليمية</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400">مراجعة بنظام التكرار المتباعد: ما تعرفه يعود بعد فترات أطول، وما تنساه يعود قريباً</p>
+      </div>
+
+      <div id="flash-setup" class="space-y-6">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-5">
+          <div>
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">اختر المادة</label>
+            <select id="flash-book-select" onchange="Flash.refresh()" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
+              <option value="">-- اختر كتاباً --</option>
+            </select>
+          </div>
+
+          <div id="flash-summary-area" class="hidden space-y-4">
+            <div class="grid grid-cols-4 gap-2 text-center">
+              <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800"><div class="text-xl font-black text-brand-600" id="flash-stat-total">0</div><div class="text-[10px] font-bold text-slate-500">كل البطاقات</div></div>
+              <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800"><div class="text-xl font-black text-rose-500" id="flash-stat-due">0</div><div class="text-[10px] font-bold text-slate-500">مستحقة الآن</div></div>
+              <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800"><div class="text-xl font-black text-indigo-500" id="flash-stat-new">0</div><div class="text-[10px] font-bold text-slate-500">جديدة</div></div>
+              <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800"><div class="text-xl font-black text-emerald-600" id="flash-stat-mastered">0</div><div class="text-[10px] font-bold text-slate-500">متقَنة</div></div>
+            </div>
+
+            <button id="flash-start-btn" onclick="Flash.start()" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-brand-600 text-white font-black shadow-lg shadow-amber-500/25 transition">
+              <span id="flash-start-label">ابدأ المراجعة</span>
+            </button>
+
+            <div class="flex gap-2 items-center">
+              <select id="flash-count-select" class="px-3 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-semibold outline-none">
+                <option value="8">8 بطاقات</option>
+                <option value="12" selected>12 بطاقة</option>
+                <option value="20">20 بطاقة</option>
+              </select>
+              <button id="flash-generate-btn" onclick="Flash.generate()" class="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-sm transition">✨ توليد بطاقات من ملخصاتي</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-6 space-y-3">
+          <h3 class="font-black text-sm text-slate-800 dark:text-white">بطاقات المادة</h3>
+          <div id="flash-list" class="space-y-2"></div>
+        </div>
+      </div>
+
+      <div id="flash-review" class="hidden space-y-5">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4 flex items-center justify-between">
+          <h3 class="text-base font-black text-slate-800 dark:text-white" id="flash-counter">البطاقة 1</h3>
+          <div class="flex items-center gap-2">
+            <button onclick="Flash.speakCurrent(this)" class="text-xs font-bold px-3 py-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-300">🔊 استمع</button>
+            <button onclick="Flash.exit()" class="text-xs font-bold text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 px-3 py-1.5 rounded-lg transition">إنهاء</button>
+          </div>
+        </div>
+        <div class="w-full bg-slate-200 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+          <div id="flash-progress" class="bg-gradient-to-r from-amber-500 to-emerald-500 h-full transition-all duration-300" style="width:0%"></div>
+        </div>
+
+        <div id="flash-card" class="flip-card cursor-pointer select-none" onclick="Flash.flip()">
+          <div class="flip-inner">
+            <div class="flip-face bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
+              <span class="text-[11px] font-bold text-amber-600">السؤال</span>
+              <div class="flip-text"><div id="flash-front" class="text-xl sm:text-2xl font-black text-slate-900 dark:text-white leading-relaxed whitespace-pre-line"></div></div>
+            </div>
+            <div class="flip-face flip-back bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 shadow-lg">
+              <span class="text-[11px] font-bold text-emerald-600">الإجابة</span>
+              <div class="flip-text"><div id="flash-back" class="text-base sm:text-lg font-bold text-slate-800 dark:text-slate-100 leading-relaxed whitespace-pre-line"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <p id="flash-hint" class="text-center text-xs text-slate-400">اضغط على البطاقة لقلبها (أو مفتاح المسافة) — حاول تتذكر الإجابة أولاً 💭</p>
+
+        <div id="flash-rating" class="hidden grid grid-cols-4 gap-2">
+          <button onclick="Flash.rate('again')" class="py-3 rounded-xl bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs">🔁 نسيتها<div class="opacity-70 text-[10px]">(1)</div></button>
+          <button onclick="Flash.rate('hard')" class="py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-bold text-xs">😅 صعبة<div class="opacity-70 text-[10px]">(2)</div></button>
+          <button onclick="Flash.rate('good')" class="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs">👍 جيدة<div class="opacity-70 text-[10px]">(3)</div></button>
+          <button onclick="Flash.rate('easy')" class="py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs">⚡ سهلة<div class="opacity-70 text-[10px]">(4)</div></button>
+        </div>
+      </div>
+
+      <div id="flash-done" class="hidden bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-8 text-center space-y-4"></div>
+    </section>
+
+    <!-- TAB: WEAKNESS INSIGHTS -->
+    <section id="view-insights" class="tab-view hidden max-w-3xl mx-auto space-y-6">
+      <div class="text-center space-y-2">
+        <div class="w-14 h-14 rounded-2xl bg-rose-100 dark:bg-rose-950/60 mx-auto flex items-center justify-center shadow-md text-2xl">🎯</div>
+        <h2 class="text-2xl font-black text-slate-900 dark:text-white">تقرير الذكاء الدراسي</h2>
+        <p class="text-sm text-slate-500 dark:text-slate-400">اكتشف الدروس والأسئلة التي تخطئ فيها أكثر، وركّز مراجعتك عليها</p>
+      </div>
+      <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm p-4">
+        <select id="insights-book-select" onchange="Insights.load()" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
+          <option value="">-- اختر كتاباً --</option>
+        </select>
+      </div>
+      <div id="insights-content"></div>
+      <div id="insights-ai-box"></div>
+    </section>
+
   </main>
+
+  <!-- App Footer with Ahmad Hero Credits -->
+  <footer class="mt-auto border-t border-slate-200/80 dark:border-slate-800/80 bg-white/60 dark:bg-slate-900/60 backdrop-blur-sm py-5 text-center text-xs">
+    <div class="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3 text-slate-500 dark:text-slate-400">
+      <div class="flex items-center gap-2 font-bold text-slate-700 dark:text-slate-200">
+        <div class="w-6 h-6 rounded-lg bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center text-white text-[10px]">
+          <i data-lucide="sparkles" class="w-3.5 h-3.5"></i>
+        </div>
+        <span>مساعد الدراسة الذكي (Smart Study Assistant)</span>
+      </div>
+      <div class="flex items-center gap-1.5 font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/60 px-3.5 py-1.5 rounded-full border border-brand-200 dark:border-brand-800">
+        <span>تم تصميم وتطوير هذا التطبيق بواسطة:</span>
+        <span class="text-slate-900 dark:text-white font-black text-sm">أحمد هيرو (Ahmad Hero) 🚀</span>
+      </div>
+      <div class="text-[11px] text-slate-400">
+        جميع الحقوق محفوظة © 2026
+      </div>
+    </div>
+  </footer>
 
   <!-- MODAL: ADD NEW BOOK -->
   <div id="modal-new-book" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
@@ -661,8 +852,55 @@
   </div>
 
   <!-- App Core Scripts: IndexedDB + Gemini AI + Main App -->
+  <!-- MODAL: SETTINGS -->
+  <div id="modal-settings" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-md p-6 space-y-5">
+      <div class="flex items-center justify-between">
+        <h3 class="text-lg font-black text-slate-900 dark:text-white">⚙️ الإعدادات</h3>
+        <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl leading-none">✕</button>
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-sm font-bold text-slate-700 dark:text-slate-300">مفتاح Google Gemini</label>
+        <input id="settings-api-key" type="password" autocomplete="off" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-brand-500" dir="ltr">
+        <p id="settings-key-status" class="text-xs font-bold text-slate-500"></p>
+        <p class="text-[11px] text-slate-400 leading-relaxed">يُحفظ المفتاح على جهازك فقط ولا يُرسل إلا إلى Google. احصل على مفتاح مجاني من
+          <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener" class="text-brand-600 underline">Google AI Studio</a>.
+          لا يدخل المفتاح في النسخ الاحتياطية.</p>
+        <div class="flex gap-2">
+          <button onclick="testApiKey()" class="px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold">اختبار المفتاح</button>
+          <button onclick="clearApiKey()" class="px-3 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-600 text-xs font-bold">حذف المفتاح</button>
+        </div>
+        <p id="settings-test-result" class="text-xs break-words"></p>
+      </div>
+
+      <div class="space-y-2">
+        <label class="block text-sm font-bold text-slate-700 dark:text-slate-300">سرعة القراءة الصوتية</label>
+        <input id="settings-tts-rate" type="range" min="0.6" max="1.4" step="0.05" value="0.95" class="w-full">
+        <div class="flex justify-between text-[10px] text-slate-400"><span>أبطأ</span><span>أسرع</span></div>
+      </div>
+
+      <button onclick="saveSettings()" class="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-sm shadow transition">حفظ</button>
+    </div>
+  </div>
+
+  <!-- MODAL: SUMMARIES LIBRARY -->
+  <div id="modal-summaries" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-950 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+      <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-black text-slate-900 dark:text-white" id="modal-summaries-title">الملخصات</h3>
+          <p class="text-xs text-slate-400">اقرأ ملخصاتك، استمع إليها، وحوّلها إلى بطاقات أو جداول أو خرائط ذهنية</p>
+        </div>
+        <button onclick="Library.close()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl leading-none">✕</button>
+      </div>
+      <div id="modal-summaries-body" class="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-3"></div>
+    </div>
+  </div>
+
   <script src="./db.js"></script>
   <script src="./ai.js"></script>
   <script src="./app.js"></script>
+  <script src="./features.js"></script>
 </body>
 </html>
