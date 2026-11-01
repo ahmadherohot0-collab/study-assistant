@@ -400,6 +400,17 @@
           </div>
 
           <div>
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">نوع الأسئلة المطلوبة في الاختبار</label>
+            <select id="quiz-type-select" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
+              <option value="all" selected>🎯 شامل جميع الأنواع (تعاريف، تعاليل، فراغات، واختيارات)</option>
+              <option value="definition">📖 تعاريف ومصطلحات فقط</option>
+              <option value="reasoning">❓ تعاليل وأسباب ("علل") فقط</option>
+              <option value="fill_blank">✏️ أكمل الفراغات فقط</option>
+              <option value="mcq_tf">🔘 اختيار من متعدد وصح/خطأ فقط</option>
+            </select>
+          </div>
+
+          <div>
             <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">⏱️ مؤقت الاختبار (محاكاة الامتحان)</label>
             <select id="quiz-timer-select" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
               <option value="0" selected>بدون مؤقت</option>
@@ -555,9 +566,17 @@
           <h2 class="text-2xl font-black text-slate-900 dark:text-white">بنك الأسئلة الدائم</h2>
           <p class="text-sm text-slate-500 dark:text-slate-400">جميع الأسئلة المستخرجة من صفحات كتبك محفوظة هنا للمراجعة طوال العام</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
           <select id="bank-book-select" onchange="loadBankQuestions()" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold">
             <option value="all">جميع المواد والكتب</option>
+          </select>
+          <select id="bank-type-select" onchange="loadBankQuestions()" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold">
+            <option value="all">🎯 جميع أنواع الأسئلة</option>
+            <option value="definition">📖 تعاريف ومصطلحات</option>
+            <option value="reasoning">❓ تعاليل وأسباب ("علل")</option>
+            <option value="fill_blank">✏️ أكمل الفراغات</option>
+            <option value="mcq">🔘 اختيار من متعدد</option>
+            <option value="true_false">⚖️ صح أو خطأ</option>
           </select>
         </div>
       </div>
