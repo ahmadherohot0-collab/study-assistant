@@ -516,20 +516,51 @@
       const idx = currentQuestionIndex;
       const st = state(idx);
       const answered = selected !== undefined;
+
+      let hintText = 'اكتب إجابتك هنا بأسلوبك...';
+      let actionLabel = 'اكتب إجابتك ثم اكشف الإجابة النموذجية وقارنها:';
+      if (q.type === 'definition') {
+        hintText = 'عرّف المصطلح بأسلوبك أو كما ورد في الكتاب...';
+        actionLabel = '📖 اكتب تعريفك للمصطلح ثم اكشف الإجابة النموذجية للتأكد:';
+      } else if (q.type === 'reasoning') {
+        hintText = 'اكتب التعليل والتفسير العلمي هنا...';
+        actionLabel = '❓ اكتب سبب التعليل ثم اكشف الإجابة النموذجية:';
+      } else if (q.type === 'fill_blank') {
+        hintText = 'اكتب الكلمة أو العبارة المناسبة لإكمال الفراغ...';
+        actionLabel = '✏️ اكتب الكلمة أو الكلمات الناقصة في الفراغ:';
+      }
+
       container.innerHTML = `
-        <textarea id="open-answer-input" rows="4" placeholder="اكتب إجابتك هنا (اختياري) ثم اكشف الإجابة النموذجية وقيّم نفسك بصدق..."
-          class="w-full px-4 py-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm outline-none focus:ring-2 focus:ring-brand-500">${esc(st.draft)}</textarea>
-        ${!st.revealed ? `
-          <button onclick="OpenQ.reveal()" class="w-full py-3 rounded-2xl bg-slate-900 dark:bg-slate-700 text-white font-bold text-sm">👁️ اكشف الإجابة النموذجية</button>
-        ` : `
-          <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
-            <div class="text-[11px] font-black text-emerald-700 dark:text-emerald-300 mb-1">الإجابة النموذجية</div>
-            <div class="text-sm leading-relaxed whitespace-pre-line text-slate-800 dark:text-slate-100">${esc(q.correct_answer)}</div>
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <button onclick="OpenQ.grade(true)" class="py-3 rounded-2xl font-bold text-sm border-2 ${answered && selected === q.correct_answer ? 'bg-emerald-600 text-white border-emerald-600' : 'border-emerald-300 text-emerald-700 dark:text-emerald-300'}">✅ أجبت بشكل صحيح</button>
-            <button onclick="OpenQ.grade(false)" class="py-3 rounded-2xl font-bold text-sm border-2 ${answered && selected !== q.correct_answer ? 'bg-rose-600 text-white border-rose-600' : 'border-rose-300 text-rose-700 dark:text-rose-300'}">❌ لم أُصب</button>
-          </div>`}
+        <div class="space-y-3">
+          <p class="text-xs font-bold text-slate-500 dark:text-slate-400">${actionLabel}</p>
+          <textarea id="open-answer-input" rows="${q.type === 'fill_blank' ? 2 : 4}" placeholder="${hintText}"
+            class="w-full px-4 py-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-medium outline-none focus:ring-2 focus:ring-brand-500">${esc(st.draft)}</textarea>
+          ${!st.revealed ? `
+            <button onclick="OpenQ.reveal()" class="w-full py-3.5 rounded-2xl bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 dark:from-brand-600 dark:to-brand-700 text-white font-black text-sm shadow-md transition flex items-center justify-center gap-2">
+              <span>👁️ اكشف الإجابة النموذجية وقارنها</span>
+            </button>
+          ` : `
+            <div class="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 space-y-1.5 animate-fadeIn">
+              <div class="text-[11px] font-black text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                <span>✓ الإجابة النموذجية المعتمدة:</span>
+              </div>
+              <div class="text-sm font-bold leading-relaxed whitespace-pre-line text-slate-800 dark:text-slate-100">${esc(q.correct_answer)}</div>
+              ${q.explanation ? `
+                <div class="pt-2 mt-2 border-t border-emerald-200/60 dark:border-emerald-800/60 text-xs text-slate-600 dark:text-slate-300">
+                  <span class="font-bold text-emerald-700 dark:text-emerald-400">💡 الشرح: </span>${esc(q.explanation)}
+                </div>
+              ` : ''}
+            </div>
+            <div class="text-xs font-bold text-slate-500 text-center pt-1">كيف ترى إجابتك مقارنة بالنموذج؟</div>
+            <div class="grid grid-cols-2 gap-2.5">
+              <button onclick="OpenQ.grade(true)" class="py-3 rounded-2xl font-black text-sm border-2 transition flex items-center justify-center gap-1.5 ${answered && selected === q.correct_answer ? 'bg-emerald-600 text-white border-emerald-600 shadow-md' : 'border-emerald-400 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'}">
+                <span>✅ إجابتي صحيحة</span>
+              </button>
+              <button onclick="OpenQ.grade(false)" class="py-3 rounded-2xl font-black text-sm border-2 transition flex items-center justify-center gap-1.5 ${answered && selected !== q.correct_answer ? 'bg-rose-600 text-white border-rose-600 shadow-md' : 'border-rose-400 text-rose-700 dark:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/30'}">
+                <span>❌ أخطأت / نسيت</span>
+              </button>
+            </div>`}
+        </div>
       `;
       const ta = $('open-answer-input');
       if (ta) ta.addEventListener('input', (e) => { st.draft = e.target.value; });
@@ -544,7 +575,7 @@
       const idx = currentQuestionIndex;
       const q = currentQuiz.questions[idx];
       const st = state(idx);
-      userAnswers[idx] = ok ? q.correct_answer : ((st.draft.trim() || 'لم أُصب') + ' (تقييم ذاتي: خطأ)');
+      userAnswers[idx] = ok ? q.correct_answer : ((st.draft.trim() || 'لم أجب بدقة') + ' (تقييم ذاتي: غير صحيح)');
       renderActiveQuestion();
     }
 
@@ -555,11 +586,34 @@
 
   // Called by app.js after every question render.
   window.onQuestionRendered = function (q) {
-    const hasOptions = !!(q.options && q.options.length);
     const badge = $('quiz-question-type-badge');
-    if (badge) badge.textContent = hasOptions ? (q.type === 'true_false' ? 'صح / خطأ' : 'اختيار من متعدد') : 'سؤال كتابي (تقييم ذاتي)';
+    if (badge) {
+      let label = 'اختيار من متعدد 🔘';
+      let cls = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300';
+      if (q.type === 'definition') {
+        label = '📖 تعريف مصطلح';
+        cls = 'bg-blue-100 text-blue-800 dark:bg-blue-950/70 dark:text-blue-300 border border-blue-300/50';
+      } else if (q.type === 'reasoning') {
+        label = '❓ علل واذكر السبب';
+        cls = 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300/50';
+      } else if (q.type === 'fill_blank') {
+        label = '✏️ أكمل الفراغ';
+        cls = 'bg-teal-100 text-teal-800 dark:bg-teal-950/70 dark:text-teal-300 border border-teal-300/50';
+      } else if (q.type === 'true_false') {
+        label = '⚖️ صح أو خطأ';
+        cls = 'bg-purple-100 text-purple-800 dark:bg-purple-950/70 dark:text-purple-300 border border-purple-300/50';
+      } else if (q.type === 'mcq') {
+        label = '🔘 اختيار من متعدد';
+        cls = 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-300/50';
+      } else if (!q.options || q.options.length === 0) {
+        label = '✍️ سؤال كتابي (تقييم ذاتي)';
+        cls = 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-300/50';
+      }
+      badge.textContent = label;
+      badge.className = `px-3 py-1 rounded-full text-xs font-bold ${cls}`;
+    }
     const rephrase = $('btn-rephrase-question');
-    if (rephrase) rephrase.classList.toggle('hidden', !hasOptions);
+    if (rephrase) rephrase.classList.remove('hidden');
   };
 
   // Called by app.js after the results screen is shown.
