@@ -1,3 +1,12 @@
+function getQuestionTypeBadge(type, hasOptions) {
+    if (type === 'definition') return '<span class="px-2.5 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800 text-[11px] font-black">📖 تعريف مصطلح</span>';
+    if (type === 'reasoning') return '<span class="px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 text-[11px] font-black">❓ علل / اذكر السبب</span>';
+    if (type === 'fill_blank') return '<span class="px-2.5 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 text-[11px] font-black">✏️ أكمل الفراغ</span>';
+    if (type === 'true_false') return '<span class="px-2.5 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-[11px] font-black">⚖️ صح أو خطأ</span>';
+    if (type === 'mcq' || hasOptions) return '<span class="px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 text-[11px] font-black">🔘 اختيار من متعدد</span>';
+    return '<span class="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[11px] font-black">✍️ سؤال مقالي</span>';
+}
+
 // Smart Study Assistant - Standalone Web & Android Client
 // Powered by IndexedDB and Gemini 3 Flash AI - Works 100% 24/7 without PC
 
@@ -607,6 +616,8 @@ async function startQuiz() {
     const bookId = bookSelect.value;
     const countSelect = document.getElementById('quiz-count-select');
     const count = parseInt(countSelect ? countSelect.value : 5) || 5;
+    const typeSelect = document.getElementById('quiz-type-select');
+    const selectedType = typeSelect ? typeSelect.value : 'all';
 
     // Check mode: fresh_ai vs bank
     const modeRadio = document.querySelector('input[name="quiz-mode"]:checked');
@@ -645,7 +656,7 @@ async function startQuiz() {
                 return;
             }
 
-            quizQuestions = await window.studyAI.generateFreshQuiz(bookName, combinedSummary, count);
+            quizQuestions = await window.studyAI.generateFreshQuiz(bookName, combinedSummary, count, selectedType);
         } else {
             // Retrieve from local questions bank
             let allQs = await window.studyDB.getQuestions(bookId);
@@ -654,6 +665,20 @@ async function startQuiz() {
                 if (submittingScreen) submittingScreen.classList.add('hidden');
                 if (setupScreen) setupScreen.classList.remove('hidden');
                 return;
+            }
+
+            if (selectedType !== 'all') {
+                if (selectedType === 'mcq_tf') {
+                    allQs = allQs.filter(q => q.type === 'mcq' || q.type === 'true_false' || (q.options && q.options.length > 0));
+                } else {
+                    allQs = allQs.filter(q => q.type === selectedType);
+                }
+                if (allQs.length === 0) {
+                    alert('لا توجد أسئلة من النوع المحدد في بنك الأسئلة لهذه المادة بعد! اختر (أسئلة جديدة متجددة 🌟) لتوليدها فوراً بالذكاء الاصطناعي أو اختر نوعاً آخر.');
+                    if (submittingScreen) submittingScreen.classList.add('hidden');
+                    if (setupScreen) setupScreen.classList.remove('hidden');
+                    return;
+                }
             }
 
             // Shuffle
@@ -810,9 +835,10 @@ async function rephraseCurrentQuestion() {
     try {
         const rephrased = await window.studyAI.rephraseQuestion(
             q.question,
-            q.options,
+            q.options || [],
             q.correct_answer,
-            q.explanation
+            q.explanation,
+            q.type || 'mcq'
         );
 
         if (rephrased && rephrased.question) {
@@ -860,6 +886,7 @@ async function submitQuizAnswers() {
 
         details.push({
             question_id: q.id || idx,
+            type: q.type || (Array.isArray(q.options) && q.options.length ? 'mcq' : 'open'),
             question: q.question,
             material_id: q.material_id || 0,
             options: Array.isArray(q.options) ? q.options : [],
@@ -1005,7 +1032,7 @@ function renderResultsBreakdownList() {
 
         card.innerHTML = `
             <div class="flex items-start justify-between gap-3 mb-3">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                     <span class="w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black ${
                         item.is_correct
                             ? 'bg-emerald-600 text-white'
@@ -1016,6 +1043,7 @@ function renderResultsBreakdownList() {
                             ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300'
                             : 'bg-rose-100 text-rose-800 dark:bg-rose-900/60 dark:text-rose-300'
                     }">${item.is_correct ? 'إجابة صحيحة ✓' : 'إجابة خاطئة ✗'}</span>
+                    ${getQuestionTypeBadge(item.type, item.options && item.options.length > 0)}
                 </div>
             </div>
 
@@ -1129,6 +1157,8 @@ function startCustomQuiz(bookId, bookName, questions, label) {
 async function loadBankQuestions() {
     const bookSelect = document.getElementById('bank-book-select');
     const selectedBookId = bookSelect ? bookSelect.value : 'all';
+    const typeSelect = document.getElementById('bank-type-select');
+    const selectedType = typeSelect ? typeSelect.value : 'all';
     const container = document.getElementById('bank-questions-list');
     if (!container) return;
 
@@ -1146,6 +1176,14 @@ async function loadBankQuestions() {
             const book = booksList.find(b => b.id == selectedBookId);
             const bookName = book ? book.name : '';
             questions = questions.map(q => ({ ...q, book_name: bookName }));
+        }
+
+        if (selectedType !== 'all') {
+            questions = questions.filter(q => {
+                if (selectedType === 'mcq') return q.type === 'mcq' || (!q.type && q.options && q.options.length > 2);
+                if (selectedType === 'true_false') return q.type === 'true_false';
+                return q.type === selectedType;
+            });
         }
 
         renderBankQuestions(questions);
@@ -1173,24 +1211,42 @@ function renderBankQuestions(questions) {
         item.className = 'p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3';
 
         const options = q.options || [];
-        const optionsHtml = options.map((opt) => {
-            const isCorrect = (opt.trim() === (q.correct_answer || '').trim());
-            return `
-                <div class="p-2.5 rounded-xl text-xs font-semibold flex items-center justify-between ${
-                    isCorrect
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
-                        : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
-                }">
-                    <span>${escapeHtml(opt)}</span>
-                    ${isCorrect ? '<span class="text-[11px] font-black text-emerald-600">✓ إجابة صحيحة</span>' : ''}
+        const hasOptions = options.length > 0;
+        const typeBadge = getQuestionTypeBadge(q.type, hasOptions);
+
+        let bodyHtml = '';
+        if (hasOptions) {
+            bodyHtml = `
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    ${options.map((opt) => {
+                        const isCorrect = (opt.trim() === (q.correct_answer || '').trim());
+                        return `
+                            <div class="p-2.5 rounded-xl text-xs font-semibold flex items-center justify-between ${
+                                isCorrect
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                            }">
+                                <span>${escapeHtml(opt)}</span>
+                                ${isCorrect ? '<span class="text-[11px] font-black text-emerald-600">✓ إجابة صحيحة</span>' : ''}
+                            </div>
+                        `;
+                    }).join('')}
                 </div>
             `;
-        }).join('');
+        } else {
+            bodyHtml = `
+                <div class="p-3.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/40 text-xs text-emerald-900 dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800 flex items-start gap-2">
+                    <span class="font-black text-emerald-700 dark:text-emerald-400 shrink-0">✓ الإجابة النموذجية:</span>
+                    <span class="font-bold leading-relaxed">${escapeHtml(q.correct_answer || '')}</span>
+                </div>
+            `;
+        }
 
         item.innerHTML = `
             <div class="flex items-start justify-between gap-3">
-                <div class="flex items-center gap-2">
+                <div class="flex flex-wrap items-center gap-2">
                     <span class="px-2.5 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 text-xs font-black">#${idx + 1}</span>
+                    ${typeBadge}
                     <span class="text-xs text-slate-400">${escapeHtml(q.book_name || '')}</span>
                 </div>
                 <button onclick="deleteQuestion(${q.id})" class="text-slate-400 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40 transition">
@@ -1200,9 +1256,7 @@ function renderBankQuestions(questions) {
 
             <h4 class="text-sm font-black text-slate-900 dark:text-white leading-relaxed">${escapeHtml(q.question)}</h4>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                ${optionsHtml}
-            </div>
+            ${bodyHtml}
 
             ${q.explanation ? `
                 <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
