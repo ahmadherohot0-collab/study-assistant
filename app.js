@@ -912,6 +912,169 @@ async function rephraseCurrentQuestion() {
     }
 }
 
+
+// =====================================================================
+// SMART ARABIC ANSWER EVALUATION ENGINE (تعاريف، تعاليل، فراغات، مقالي)
+// =====================================================================
+function normalizeArabicText(text) {
+    if (!text) return '';
+    return text.toString().toLowerCase()
+        // Remove diacritics / tashkeel
+        .replace(/[\u064B-\u065F\u0670]/g, '')
+        // Normalize Alef variants
+        .replace(/[أإآٱ]/g, 'ا')
+        // Normalize Taa Marbuta & Haa
+        .replace(/ة/g, 'ه')
+        // Normalize Yaa & Alef Maqsura
+        .replace(/ى/g, 'ي')
+        // Remove tatweel
+        .replace(/ـ+/g, '')
+        // Remove punctuation and brackets
+        .replace(/[،؛؟,\.\?!:;\-\(\)\[\]"'\/\\]/g, ' ')
+        // Normalize spaces
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function stripArabicPrefixes(word) {
+    if (!word || word.length <= 3) return word;
+    if (word.startsWith('ال') && word.length > 4) {
+        word = word.slice(2);
+    }
+    if ((word.startsWith('و') || word.startsWith('ف') || word.startsWith('ب') || word.startsWith('ل') || word.startsWith('ك')) && word.length > 4) {
+        word = word.slice(1);
+        if (word.startsWith('ال') && word.length > 4) {
+            word = word.slice(2);
+        }
+    }
+    return word;
+}
+
+function extractArabicKeywords(normText) {
+    if (!normText) return [];
+    const stopWords = new Set([
+        'في', 'من', 'على', 'إلى', 'الى', 'عن', 'مع', 'حتى', 'ثم', 'أو', 'او', 'أم', 'ام',
+        'هو', 'هي', 'هما', 'هم', 'هن', 'هذا', 'هذه', 'هذان', 'هاتان', 'هؤلاء', 'ذلك', 'تلك',
+        'التي', 'الذي', 'الذين', 'اللواتي', 'اللائي', 'اللتان', 'اللذان',
+        'أن', 'ان', 'إن', 'بأن', 'لأن', 'لان', 'كي', 'لكي', 'حيث', 'بين', 'حول', 'تحت', 'فوق',
+        'كل', 'بعض', 'غير', 'سوى', 'ما', 'لا', 'لم', 'لن', 'ليس', 'ليست',
+        'كان', 'كانت', 'يكون', 'تكون', 'تم', 'تمت', 'يتم', 'يعد', 'تعد', 'يعتبر', 'تعتبر',
+        'مثل', 'كما', 'كذلك', 'ايضا', 'أيضا', 'فقط', 'جدا', 'جداً', 'قد', 'لقد', 'إذا', 'اذا',
+        'سبب', 'بسبب', 'طريق', 'عبر', 'خلال', 'تسمى', 'يسمى', 'عبارة'
+    ]);
+    return normText.split(/\s+/).filter(w => w.length >= 3 && !stopWords.has(w));
+}
+
+function calcTextSimilarity(s1, s2) {
+    if (s1 === s2) return 1.0;
+    if (!s1 || !s2) return 0.0;
+    const track = Array(s2.length + 1).fill(null).map(() => Array(s1.length + 1).fill(null));
+    for (let i = 0; i <= s1.length; i += 1) track[0][i] = i;
+    for (let j = 0; j <= s2.length; j += 1) track[j][0] = j;
+    for (let j = 1; j <= s2.length; j += 1) {
+        for (let i = 1; i <= s1.length; i += 1) {
+            const indicator = s1[i - 1] === s2[j - 1] ? 0 : 1;
+            track[j][i] = Math.min(
+                track[j][i - 1] + 1,
+                track[j - 1][i] + 1,
+                track[j - 1][i - 1] + indicator
+            );
+        }
+    }
+    const distance = track[s2.length][s1.length];
+    const maxLen = Math.max(s1.length, s2.length);
+    return 1 - (distance / maxLen);
+}
+
+function evaluateQuestionAnswer(userAnswer, question) {
+    if (!userAnswer || userAnswer === 'لم تجب' || !userAnswer.toString().trim()) {
+        return { isCorrect: false, reason: 'لم يتم تقديم إجابة' };
+    }
+
+    let rawUser = userAnswer.toString().trim();
+
+    // 1. Explicit self-approval from review UI
+    if (rawUser.includes('[معتمد_ذاتيا_صحيح]')) {
+        return { isCorrect: true, reason: 'تم اعتمادها ذاتياً كإجابة صحيحة' };
+    }
+    if (rawUser.includes('[تقييم_ذاتي_خاطئ]') || rawUser.includes('(تقييم ذاتي: غير صحيح)')) {
+        return { isCorrect: false, reason: 'تم تقييمها ذاتياً بأنها غير صحيحة' };
+    }
+
+    const cleanUser = rawUser.replace(/\[.*?\]/g, '').trim();
+    const cleanCorrect = (question.correct_answer || '').toString().trim();
+    const qType = question.type || (question.options && question.options.length ? 'mcq' : 'open');
+
+    // 2. Strict exact equality
+    if (cleanUser === cleanCorrect) {
+        return { isCorrect: true, reason: 'تطابق تام' };
+    }
+
+    const normUser = normalizeArabicText(cleanUser);
+    const normCorrect = normalizeArabicText(cleanCorrect);
+
+    // 3. Normalized equality
+    if (normUser === normCorrect) {
+        return { isCorrect: true, reason: 'تطابق كامل بعد تسوية الأحرف' };
+    }
+
+    // Multiple Choice & True/False
+    if (qType === 'mcq' || qType === 'true_false') {
+        return { isCorrect: normUser === normCorrect, reason: 'اختيار من متعدد' };
+    }
+
+    // 4. Fill in the blank (أكمل الفراغ)
+    if (qType === 'fill_blank') {
+        if (normCorrect.includes(normUser) || normUser.includes(normCorrect)) {
+            if (normUser.length >= 3) {
+                return { isCorrect: true, reason: 'تطابق الكلمة المفتاحية في الفراغ' };
+            }
+        }
+        const stemUser = stripArabicPrefixes(normUser);
+        const stemCorrect = stripArabicPrefixes(normCorrect);
+        if (stemUser === stemCorrect || stemCorrect.includes(stemUser) || stemUser.includes(stemCorrect)) {
+            if (stemUser.length >= 3) {
+                return { isCorrect: true, reason: 'تطابق جذر الكلمة في الفراغ' };
+            }
+        }
+        if (calcTextSimilarity(normUser, normCorrect) >= 0.70) {
+            return { isCorrect: true, reason: 'تقارب إملائي عالي في الفراغ' };
+        }
+    }
+
+    // 5. Reasoning (التعاليل) & Definitions (التعاريف) & Open
+    if (qType === 'reasoning' || qType === 'definition' || qType === 'open') {
+        const userKeywords = extractArabicKeywords(normUser);
+        const correctKeywords = extractArabicKeywords(normCorrect);
+
+        if (correctKeywords.length > 0 && userKeywords.length > 0) {
+            let matched = 0;
+            for (const cw of correctKeywords) {
+                const cwStem = stripArabicPrefixes(cw);
+                const isMatched = userKeywords.some(uw => {
+                    const uwStem = stripArabicPrefixes(uw);
+                    return uw === cw || uwStem === cwStem || uw.includes(cw) || cw.includes(uw);
+                });
+                if (isMatched) matched++;
+            }
+
+            const coverage = matched / correctKeywords.length;
+            const threshold = qType === 'reasoning' ? 0.35 : 0.38;
+
+            if (coverage >= threshold || (matched >= 2 && userKeywords.length >= 2)) {
+                return { isCorrect: true, reason: `تطابق المفاهيم والكلمات الأساسية (${Math.round(coverage * 100)}%)` };
+            }
+        }
+
+        // Substring containment for concise sentences
+        if (normUser.length >= 10 && normCorrect.includes(normUser)) {
+            return { isCorrect: true, reason: 'تضمن المعنى النموذجي' };
+        }
+    }
+
+    return { isCorrect: false, reason: 'غير متطابق مع نص الإجابة النموذجية' };
+}
+
 // --- Submit Quiz & Detailed Breakdown Review ---
 async function submitQuizAnswers() {
     if (!currentQuiz) return;
@@ -922,9 +1085,13 @@ async function submitQuizAnswers() {
     const details = [];
 
     questions.forEach((q, idx) => {
-        const userChoice = userAnswers[idx] || 'لم تجب';
-        const isCorrect = (userChoice.trim() === (q.correct_answer || '').trim());
+        const rawChoice = userAnswers[idx] || 'لم تجب';
+        const evalRes = evaluateQuestionAnswer(rawChoice, q);
+        const isCorrect = evalRes.isCorrect;
         if (isCorrect) correctCount++;
+
+        // Clean display text (strip internal flags)
+        const displayUserAnswer = rawChoice.replace(/\[.*?\]/g, '').trim() || 'لم تجب';
 
         // Update question stats in DB if it has an ID
         if (q.id) {
@@ -936,13 +1103,16 @@ async function submitQuizAnswers() {
 
         details.push({
             question_id: q.id || idx,
+            index: idx,
             type: q.type || (Array.isArray(q.options) && q.options.length ? 'mcq' : 'open'),
             question: q.question,
             material_id: q.material_id || 0,
             options: Array.isArray(q.options) ? q.options : [],
-            user_answer: userChoice,
+            user_answer: displayUserAnswer,
+            raw_user_answer: rawChoice,
             correct_answer: q.correct_answer,
             is_correct: isCorrect,
+            eval_reason: evalRes.reason,
             explanation: q.explanation || 'لا يوجد توضيح متاح لهذا السؤال.'
         });
     });
@@ -963,7 +1133,8 @@ async function submitQuizAnswers() {
 
     // Save attempt to IndexedDB
     try {
-        await window.studyDB.addHistory(submissionResult);
+        const historyId = await window.studyDB.addHistory(submissionResult);
+        submissionResult.id = historyId;
     } catch (e) {
         console.error('Failed to save history:', e);
     }
@@ -1118,7 +1289,7 @@ function renderResultsBreakdownList() {
             </div>
 
             ${item.explanation ? `
-                <div class="p-3.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                <div class="p-3.5 rounded-xl bg-white/80 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300 leading-relaxed mb-3">
                     <div class="font-bold text-slate-800 dark:text-slate-200 mb-1 flex items-center gap-1.5">
                         <i data-lucide="lightbulb" class="w-3.5 h-3.5 text-amber-500"></i>
                         <span>التوضيح والشرح من نص المادة:</span>
@@ -1126,6 +1297,21 @@ function renderResultsBreakdownList() {
                     ${escapeHtml(item.explanation)}
                 </div>
             ` : ''}
+
+            <!-- Smart Evaluation & Manual Override Bar -->
+            <div class="pt-3 border-t border-slate-200/80 dark:border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                <span class="text-[11px] text-slate-500 dark:text-slate-400">
+                    ${item.eval_reason ? `💡 تقييم النظام: ${escapeHtml(item.eval_reason)}` : 'يمكنك تعديل الحكم يدوياً:'}
+                </span>
+                <button onclick="toggleQuestionResult(${item.index !== undefined ? item.index : idx})" class="px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition ${
+                    item.is_correct
+                        ? 'bg-rose-100 hover:bg-rose-200 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                        : 'bg-emerald-100 hover:bg-emerald-200 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 shadow-sm'
+                }">
+                    <i data-lucide="${item.is_correct ? 'x-circle' : 'check-circle'}" class="w-3.5 h-3.5"></i>
+                    <span>${item.is_correct ? 'احتسابها خاطئة ✗' : 'اعتماد إجابتي صحيحة ✓'}</span>
+                </button>
+            </div>
         `;
         breakdownList.appendChild(card);
     });
@@ -2157,3 +2343,38 @@ function closeCameraPermissionModal() {
 }
 window.openCameraPermissionModal = openCameraPermissionModal;
 window.closeCameraPermissionModal = closeCameraPermissionModal;
+
+
+async function toggleQuestionResult(qIdx) {
+    if (!lastQuizSubmission || !lastQuizSubmission.details) return;
+    const item = lastQuizSubmission.details.find(d => d.index === qIdx) || lastQuizSubmission.details[qIdx];
+    if (!item) return;
+
+    item.is_correct = !item.is_correct;
+    item.eval_reason = item.is_correct ? 'تم اعتمادها يدوياً بواسطة الطالب' : 'تم تعديلها يدوياً إلى خاطئة';
+
+    const total = lastQuizSubmission.details.length;
+    const correctCount = lastQuizSubmission.details.filter(d => d.is_correct).length;
+    lastQuizSubmission.correct_answers = correctCount;
+    lastQuizSubmission.score = correctCount;
+    lastQuizSubmission.percentage = Math.round((correctCount / total) * 100);
+
+    if (lastQuizSubmission.id && window.studyDB && window.studyDB.updateHistory) {
+        try {
+            await window.studyDB.updateHistory(lastQuizSubmission.id, {
+                score: correctCount,
+                correct_answers: correctCount,
+                percentage: lastQuizSubmission.percentage,
+                details: lastQuizSubmission.details
+            });
+        } catch (e) {
+            console.warn('updateHistory error:', e);
+        }
+    }
+
+    showQuizResults(lastQuizSubmission);
+    if (typeof showToast === 'function') {
+        showToast(item.is_correct ? '✓ تم تعديل الحكم واعتماد إجابتك صحيحة ورفع درجتك!' : 'تم تعديل السؤال إلى خاطئ', 'success');
+    }
+}
+window.toggleQuestionResult = toggleQuestionResult;
