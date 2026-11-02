@@ -1785,3 +1785,210 @@ async function deleteChapter(id) {
         alert('فشل حذف الفصل: ' + e.message);
     }
 }
+
+
+// =====================================================================
+// INTERACTIVE DOCUMENT SCANNER (RECTANGULAR GUIDING VIEWPORT & CROPPING)
+// =====================================================================
+const DocScanner = (function () {
+    let stream = null;
+    let currentDeviceIdx = 0;
+    let videoDevices = [];
+    let lastCroppedBlob = null;
+    let capturedCount = 0;
+
+    async function initDevices() {
+        try {
+            if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                videoDevices = devices.filter(d => d.kind === 'videoinput');
+            }
+        } catch (e) {
+            console.warn('enumerateDevices error:', e);
+        }
+    }
+
+    async function startCamera() {
+        stopCamera();
+        const video = document.getElementById('scanner-video');
+        if (!video) return;
+
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            alert('الكاميرا المباشرة غير مدعومة في هذا المتصفح، يمكنك استخدام زر "كاميرا الهاتف الأساسية" لالتقاط الصور.');
+            close();
+            return;
+        }
+
+        const constraints = {
+            audio: false,
+            video: {
+                facingMode: { ideal: "environment" },
+                width: { ideal: 1920, min: 1280 },
+                height: { ideal: 1080, min: 720 }
+            }
+        };
+
+        if (videoDevices.length > 0 && videoDevices[currentDeviceIdx]) {
+            constraints.video.deviceId = { exact: videoDevices[currentDeviceIdx].deviceId };
+            delete constraints.video.facingMode;
+        }
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.srcObject = stream;
+            await video.play();
+        } catch (err) {
+            console.error('Camera access error:', err);
+            // Fallback try simple video: true
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+                video.srcObject = stream;
+                await video.play();
+            } catch (err2) {
+                alert('تعذر فتح الكاميرا: ' + (err2.message || 'يرجى التأكد من إعطاء إذن الكاميرا للتطبيق'));
+                close();
+            }
+        }
+    }
+
+    function stopCamera() {
+        if (stream) {
+            stream.getTracks().forEach(t => t.stop());
+            stream = null;
+        }
+        const video = document.getElementById('scanner-video');
+        if (video) video.srcObject = null;
+    }
+
+    async function open() {
+        const modal = document.getElementById('modal-doc-scanner');
+        if (!modal) return;
+        modal.classList.remove('hidden');
+        document.getElementById('scanner-preview-wrap').classList.add('hidden');
+        document.getElementById('scanner-controls-bar').classList.remove('hidden');
+        capturedCount = 0;
+        updateCounter();
+
+        await initDevices();
+        await startCamera();
+        if (window.refreshIcons) refreshIcons();
+    }
+
+    function close() {
+        stopCamera();
+        const modal = document.getElementById('modal-doc-scanner');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    async function switchCamera() {
+        if (videoDevices.length < 2) {
+            if (typeof showToast === 'function') showToast('لا توجد كاميرا أخرى متاحة', 'info');
+            return;
+        }
+        currentDeviceIdx = (currentDeviceIdx + 1) % videoDevices.length;
+        await startCamera();
+    }
+
+    function snap() {
+        const video = document.getElementById('scanner-video');
+        const guide = document.getElementById('scanner-guide-box');
+        if (!video || !guide || !video.videoWidth) {
+            alert('الكاميرا لم تجهز بعد، انتظر ثانية...');
+            return;
+        }
+
+        if (navigator.vibrate) navigator.vibrate(50);
+
+        // Bounding rects for precise viewport cropping
+        const vRect = video.getBoundingClientRect();
+        const gRect = guide.getBoundingClientRect();
+
+        // Calculate aspect ratios & actual video offsets (object-cover)
+        const videoRatio = video.videoWidth / video.videoHeight;
+        const elemRatio = vRect.width / vRect.height;
+
+        let renderW = vRect.width;
+        let renderH = vRect.height;
+        let offsetX = 0;
+        let offsetY = 0;
+
+        if (elemRatio > videoRatio) {
+            renderH = vRect.width / videoRatio;
+            offsetY = (renderH - vRect.height) / 2;
+        } else {
+            renderW = vRect.height * videoRatio;
+            offsetX = (renderW - vRect.width) / 2;
+        }
+
+        const scale = video.videoWidth / renderW;
+
+        const cropX = Math.max(0, (gRect.left - vRect.left + offsetX) * scale);
+        const cropY = Math.max(0, (gRect.top - vRect.top + offsetY) * scale);
+        const cropW = Math.min(video.videoWidth - cropX, gRect.width * scale);
+        const cropH = Math.min(video.videoHeight - cropY, gRect.height * scale);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(cropW);
+        canvas.height = Math.round(cropH);
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+
+        canvas.toBlob((blob) => {
+            if (!blob) return;
+            lastCroppedBlob = blob;
+            const url = URL.createObjectURL(blob);
+            const previewImg = document.getElementById('scanner-preview-img');
+            if (previewImg) previewImg.src = url;
+
+            document.getElementById('scanner-preview-wrap').classList.remove('hidden');
+            document.getElementById('scanner-controls-bar').classList.add('hidden');
+            if (window.refreshIcons) refreshIcons();
+        }, 'image/jpeg', 0.92);
+    }
+
+    function acceptCurrent() {
+        if (!lastCroppedBlob) return;
+        capturedCount++;
+        const filename = `صفحة_مستند_${selectedUploadFiles.length + 1}.jpg`;
+        const file = new File([lastCroppedBlob], filename, { type: 'image/jpeg' });
+        selectedUploadFiles.push(file);
+        renderSelectedFiles();
+        lastCroppedBlob = null;
+        updateCounter();
+    }
+
+    function acceptAndNext() {
+        acceptCurrent();
+        document.getElementById('scanner-preview-wrap').classList.add('hidden');
+        document.getElementById('scanner-controls-bar').classList.remove('hidden');
+        if (typeof showToast === 'function') {
+            showToast(`✓ تم حفظ الصفحة (${capturedCount})! وجّه الكاميرا للصفحة التالية.`, 'success');
+        }
+    }
+
+    function acceptAndFinish() {
+        acceptCurrent();
+        close();
+        if (typeof showToast === 'function') {
+            showToast(`✅ تم بنجاح إضافة (${capturedCount}) صفحة واضحة إلى الدرس!`, 'success');
+        }
+        const list = document.getElementById('selected-files-list');
+        if (list) list.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function retake() {
+        lastCroppedBlob = null;
+        document.getElementById('scanner-preview-wrap').classList.add('hidden');
+        document.getElementById('scanner-controls-bar').classList.remove('hidden');
+    }
+
+    function updateCounter() {
+        const el = document.getElementById('scanner-pages-count');
+        if (el) el.textContent = `${capturedCount} صفحة ملتقطة`;
+    }
+
+    return {
+        open, close, switchCamera, snap, acceptAndNext, acceptAndFinish, retake
+    };
+})();
+window.DocScanner = DocScanner;
