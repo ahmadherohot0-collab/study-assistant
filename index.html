@@ -118,7 +118,7 @@
               </h1>
               <span class="text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 whitespace-nowrap flex items-center gap-1 shadow-xs">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>كاش: v6</span>
+                <span>كاش: v7</span>
               </span>
               <span class="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 whitespace-nowrap">
                 سحابي ومستقل 24/7 ⚡
@@ -299,11 +299,11 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2.5">
             <button type="button" onclick="DocScanner.open()" class="py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition">
               <i data-lucide="scan" class="w-5 h-5"></i>
-              <span>📐 ماسح المستندات (تحديد قياس الصفحة)</span>
+              <span>📐 ماسح المستندات (تحديد قياس وقص الصفحة)</span>
             </button>
             <button type="button" onclick="document.getElementById('camera-input').click()" class="py-3.5 px-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border-2 border-dashed border-indigo-300 dark:border-indigo-700 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-xs flex items-center justify-center gap-2 transition">
               <i data-lucide="camera" class="w-5 h-5 text-indigo-600"></i>
-              <span>📸 كاميرا الهاتف (وضع المستندات)</span>
+              <span>📸 تصوير مباشر أو رفع من الهاتف</span>
             </button>
           </div>
           <div class="mb-3">
@@ -314,8 +314,9 @@
           </div>
 
           <!-- Hidden inputs -->
-          <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden" onchange="handleFileSelect(event)">
+          <input type="file" id="camera-input" accept="image/*" class="hidden" onchange="handleFileSelect(event)">
           <input type="file" id="file-input" multiple accept="image/*,application/pdf" class="hidden" onchange="handleFileSelect(event)">
+          <input type="file" id="scanner-file-input" accept="image/*" class="hidden" onchange="DocScanner.handleSelectedPhoto(event)">
 
           <!-- Drop Zone -->
           <div id="drop-zone" onclick="document.getElementById('file-input').click()" class="border-2 border-dashed border-slate-300 dark:border-slate-700 rounded-2xl p-6 text-center hover:border-brand-500 dark:hover:border-brand-500 transition cursor-pointer bg-slate-50 dark:bg-slate-800/40">
@@ -942,7 +943,7 @@
 
       <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
         <span class="font-bold text-slate-600 dark:text-slate-400">إصدار النظام والكاش الحالي:</span>
-        <span class="font-black px-2.5 py-1 rounded-lg bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">كاش v6 (أحدث إصدار)</span>
+        <span class="font-black px-2.5 py-1 rounded-lg bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">كاش v7 (أحدث إصدار)</span>
       </div>
 
       <button onclick="saveSettings()" class="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-sm shadow transition">حفظ</button>
@@ -1008,6 +1009,62 @@
   </div>
 
   
+    <!-- MODAL: CAMERA PERMISSION & ALTERNATIVE GUIDE -->
+  <div id="modal-camera-permission" class="hidden fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+          <span class="p-2 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600">
+            <i data-lucide="camera-off" class="w-5 h-5"></i>
+          </span>
+          <span>إذن الكاميرا محظور أو غير مفعّل</span>
+        </h3>
+        <button onclick="closeCameraPermissionModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+        <p class="font-bold text-slate-800 dark:text-slate-200">
+          لم يتمكن المتصفح أو التطبيق من فتح الكاميرا المباشرة بسبب حظر الإذن (Permission denied). إليك خطوات تفعيلها بثوانٍ:
+        </p>
+
+        <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+          <div class="font-black text-brand-600 dark:text-brand-400 flex items-center gap-1.5">
+            <i data-lucide="globe" class="w-4 h-4"></i>
+            <span>إذا كنت تفتح الرابط في متصفح Chrome:</span>
+          </div>
+          <ol class="list-decimal list-inside space-y-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+            <li>اضغط على أيقونة الإعدادات أو القفل 🔒 بجانب رابط الموقع في أعلى المتصفح.</li>
+            <li>اختر <b>أذونات الموقع (Permissions)</b> ثم غيّر <b>الكاميرا (Camera)</b> إلى <b>السماح (Allow)</b>.</li>
+            <li>أعد تحميل الصفحة وستعمل الكاميرا فوراً.</li>
+          </ol>
+        </div>
+
+        <div class="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-2">
+          <div class="font-black text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+            <i data-lucide="smartphone" class="w-4 h-4"></i>
+            <span>إذا كنت تستخدم تطبيق الأندرويد (APK):</span>
+          </div>
+          <ol class="list-decimal list-inside space-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+            <li>افتح <b>إعدادات الهاتف</b> -> <b>التطبيقات</b> -> <b>مساعد الدراسة</b>.</li>
+            <li>اضغط <b>الأذونات (Permissions)</b> -> <b>الكاميرا</b> -> اختر <b>السماح</b>.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="pt-2 space-y-2">
+        <button onclick="closeCameraPermissionModal(); document.getElementById('scanner-file-input').click();" class="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-98">
+          <i data-lucide="folder-open" class="w-4 h-4"></i>
+          <span>📁 أو اختر صورة من الألبوم لضبط قياسها وقصها الآن</span>
+        </button>
+        <button onclick="closeCameraPermissionModal(); document.getElementById('camera-input').click();" class="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition">
+          📸 فتح كاميرا الهاتف الخارجية
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: DOCUMENT SCANNER (CAMERA WITH RECTANGULAR BOUNDING BOX) -->
   <div id="modal-doc-scanner" class="hidden fixed inset-0 z-50 bg-black flex flex-col justify-between select-none">
     <!-- Scanner Top Bar -->
@@ -1020,6 +1077,10 @@
         <span id="scanner-pages-count" class="text-xs text-emerald-300 font-black">0 صفحة ملتقطة</span>
       </div>
       <div class="flex items-center gap-2">
+        <button onclick="document.getElementById('scanner-file-input').click()" class="px-3 py-1.5 rounded-xl bg-white/20 hover:bg-white/30 text-white text-xs font-bold flex items-center gap-1.5 transition" title="اختيار صورة من الهاتف لقصها">
+          <i data-lucide="folder-image" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">من الألبوم</span>
+        </button>
         <button id="scanner-switch-cam-btn" onclick="DocScanner.switchCamera()" class="p-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white transition" title="تبديل الكاميرا">
           <i data-lucide="refresh-cw" class="w-5 h-5"></i>
         </button>
@@ -1082,11 +1143,18 @@
     </div>
 
     <!-- Scanner Bottom Controls -->
-    <div id="scanner-controls-bar" class="p-6 bg-black/75 backdrop-blur-md flex items-center justify-center z-20">
+    <div id="scanner-controls-bar" class="p-6 bg-black/75 backdrop-blur-md flex items-center justify-center gap-5 sm:gap-8 z-20">
+      <button onclick="document.getElementById('scanner-file-input').click()" class="px-4 py-2.5 rounded-2xl bg-white/15 hover:bg-white/25 active:scale-95 text-white text-xs font-bold flex items-center gap-2 transition border border-white/20 shadow-lg" title="اختيار صورة من الألبوم لضبط قياسها وقصها">
+        <i data-lucide="folder-open" class="w-4 h-4 text-emerald-400"></i>
+        <span>من الألبوم</span>
+      </button>
       <button onclick="DocScanner.snap()" class="group relative w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition active:scale-95 shadow-2xl" title="التقاط الصفحة وقصها">
         <div class="w-16 h-16 rounded-full bg-emerald-500 group-hover:bg-emerald-400 flex items-center justify-center text-white transition shadow-inner">
           <i data-lucide="camera" class="w-8 h-8"></i>
         </div>
+      </button>
+      <button onclick="DocScanner.switchCamera()" class="p-3.5 rounded-2xl bg-white/15 hover:bg-white/25 active:scale-95 text-white text-xs font-bold flex items-center justify-center transition border border-white/20 shadow-lg" title="تبديل الكاميرا">
+        <i data-lucide="refresh-cw" class="w-5 h-5 text-emerald-400"></i>
       </button>
     </div>
   </div>
