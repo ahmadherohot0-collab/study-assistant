@@ -563,7 +563,17 @@
         </div>
       `;
       const ta = $('open-answer-input');
-      if (ta) ta.addEventListener('input', (e) => { st.draft = e.target.value; });
+      if (ta) {
+        ta.addEventListener('input', (e) => {
+          const val = e.target.value;
+          st.draft = val;
+          if (val && val.trim()) {
+            userAnswers[currentQuestionIndex] = val.trim();
+          } else {
+            delete userAnswers[currentQuestionIndex];
+          }
+        });
+      }
     }
 
     function reveal() {
@@ -575,7 +585,13 @@
       const idx = currentQuestionIndex;
       const q = currentQuiz.questions[idx];
       const st = state(idx);
-      userAnswers[idx] = ok ? q.correct_answer : ((st.draft.trim() || 'لم أجب بدقة') + ' (تقييم ذاتي: غير صحيح)');
+      st.selfApproved = ok;
+      if (ok) {
+        // If user marks their answer as correct, record it with an explicit verified marker
+        userAnswers[idx] = st.draft.trim() ? (st.draft.trim() + ' [معتمد_ذاتيا_صحيح]') : q.correct_answer;
+      } else {
+        userAnswers[idx] = (st.draft.trim() || 'لم أجب بدقة') + ' [تقييم_ذاتي_خاطئ]';
+      }
       renderActiveQuestion();
     }
 
