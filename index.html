@@ -118,7 +118,7 @@
               </h1>
               <span class="text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 whitespace-nowrap flex items-center gap-1 shadow-xs">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>كاش: v7</span>
+                <span>كاش: v8</span>
               </span>
               <span class="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 whitespace-nowrap">
                 سحابي ومستقل 24/7 ⚡
@@ -299,11 +299,11 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2.5">
             <button type="button" onclick="DocScanner.open()" class="py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition">
               <i data-lucide="scan" class="w-5 h-5"></i>
-              <span>📐 ماسح المستندات (تحديد قياس وقص الصفحة)</span>
+              <span>📐 ماسح المستندات المباشر (بث حي وقص)</span>
             </button>
             <button type="button" onclick="document.getElementById('camera-input').click()" class="py-3.5 px-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border-2 border-dashed border-indigo-300 dark:border-indigo-700 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-xs flex items-center justify-center gap-2 transition">
               <i data-lucide="camera" class="w-5 h-5 text-indigo-600"></i>
-              <span>📸 تصوير مباشر أو رفع من الهاتف</span>
+              <span>📸 كاميرا الهاتف (وضع المستندات المدمج)</span>
             </button>
           </div>
           <div class="mb-3">
@@ -943,7 +943,7 @@
 
       <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
         <span class="font-bold text-slate-600 dark:text-slate-400">إصدار النظام والكاش الحالي:</span>
-        <span class="font-black px-2.5 py-1 rounded-lg bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">كاش v7 (أحدث إصدار)</span>
+        <span class="font-black px-2.5 py-1 rounded-lg bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">كاش v8 (أحدث إصدار)</span>
       </div>
 
       <button onclick="saveSettings()" class="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-sm shadow transition">حفظ</button>
@@ -1015,9 +1015,9 @@
       <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
         <h3 class="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
           <span class="p-2 rounded-xl bg-amber-100 dark:bg-amber-950/60 text-amber-600">
-            <i data-lucide="camera-off" class="w-5 h-5"></i>
+            <i data-lucide="camera" class="w-5 h-5"></i>
           </span>
-          <span>إذن الكاميرا محظور أو غير مفعّل</span>
+          <span id="camera-modal-title">خيارات التصوير ومسح المستندات</span>
         </h3>
         <button onclick="closeCameraPermissionModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg">
           <i data-lucide="x" class="w-5 h-5"></i>
@@ -1025,41 +1025,41 @@
       </div>
 
       <div class="space-y-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-        <p class="font-bold text-slate-800 dark:text-slate-200">
-          لم يتمكن المتصفح أو التطبيق من فتح الكاميرا المباشرة بسبب حظر الإذن (Permission denied). إليك خطوات تفعيلها بثوانٍ:
+        <p id="camera-modal-desc" class="font-bold text-slate-800 dark:text-slate-200">
+          لم نتمكن من تشغيل البث المباشر للكاميرا داخل المتصفح. يمكنك استخدام كاميرا الهاتف (التي تدعم وضع المستندات) أو اختيار صورة لقصها:
         </p>
 
-        <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
-          <div class="font-black text-brand-600 dark:text-brand-400 flex items-center gap-1.5">
-            <i data-lucide="globe" class="w-4 h-4"></i>
-            <span>إذا كنت تفتح الرابط في متصفح Chrome:</span>
+        <p id="camera-modal-err-details" class="hidden p-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-700 dark:text-rose-300 font-mono text-[11px]"></p>
+
+        <div class="p-3.5 rounded-2xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-2">
+          <div class="font-black text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+            <i data-lucide="check-circle" class="w-4 h-4"></i>
+            <span>الحل الأسهل والأفضل مباشرة:</span>
           </div>
-          <ol class="list-decimal list-inside space-y-1.5 text-[11px] text-slate-600 dark:text-slate-300">
-            <li>اضغط على أيقونة الإعدادات أو القفل 🔒 بجانب رابط الموقع في أعلى المتصفح.</li>
-            <li>اختر <b>أذونات الموقع (Permissions)</b> ثم غيّر <b>الكاميرا (Camera)</b> إلى <b>السماح (Allow)</b>.</li>
-            <li>أعد تحميل الصفحة وستعمل الكاميرا فوراً.</li>
-          </ol>
+          <p class="text-[11px] text-slate-600 dark:text-slate-300">
+            اضغط على الزر الأخضر أدناه لفتح كاميرا هاتفك؛ حيث يظهر مستطيل «المستندات» المدمج في هاتفك تلقائياً لالتقاط الصفحة بدقة كاملة!
+          </p>
         </div>
 
-        <div class="p-3.5 rounded-2xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 space-y-2">
-          <div class="font-black text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
-            <i data-lucide="smartphone" class="w-4 h-4"></i>
-            <span>إذا كنت تستخدم تطبيق الأندرويد (APK):</span>
+        <div class="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+          <div class="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+            <i data-lucide="settings" class="w-4 h-4"></i>
+            <span>لتشغيل الكاميرا المباشرة داخل الصفحة:</span>
           </div>
-          <ol class="list-decimal list-inside space-y-1 text-[11px] text-slate-600 dark:text-slate-300">
-            <li>افتح <b>إعدادات الهاتف</b> -> <b>التطبيقات</b> -> <b>مساعد الدراسة</b>.</li>
-            <li>اضغط <b>الأذونات (Permissions)</b> -> <b>الكاميرا</b> -> اختر <b>السماح</b>.</li>
-          </ol>
+          <p class="text-[11px] text-slate-500 dark:text-slate-400">
+            تأكد من إغلاق تطبيق الكاميرا في خلفية الهاتف، وتفعيل الإذن من رمز القفل 🔒 بجانب رابط الموقع بأعلى المتصفح.
+          </p>
         </div>
       </div>
 
       <div class="pt-2 space-y-2">
-        <button onclick="closeCameraPermissionModal(); document.getElementById('scanner-file-input').click();" class="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-98">
-          <i data-lucide="folder-open" class="w-4 h-4"></i>
-          <span>📁 أو اختر صورة من الألبوم لضبط قياسها وقصها الآن</span>
+        <button onclick="closeCameraPermissionModal(); document.getElementById('camera-input').click();" class="w-full py-3.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition active:scale-98">
+          <i data-lucide="camera" class="w-4 h-4"></i>
+          <span>📸 التقاط بكاميرا الهاتف الآن (وضع المستندات)</span>
         </button>
-        <button onclick="closeCameraPermissionModal(); document.getElementById('camera-input').click();" class="w-full py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs transition">
-          📸 فتح كاميرا الهاتف الخارجية
+        <button onclick="closeCameraPermissionModal(); document.getElementById('scanner-file-input').click();" class="w-full py-3 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition">
+          <i data-lucide="folder-open" class="w-4 h-4 text-brand-600"></i>
+          <span>📁 اختيار صورة من الألبوم وقصها بالمستطيل</span>
         </button>
       </div>
     </div>
