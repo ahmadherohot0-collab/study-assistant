@@ -1814,8 +1814,8 @@ const DocScanner = (function () {
         if (!video) return;
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('الكاميرا المباشرة غير مدعومة في هذا المتصفح، يمكنك استخدام زر "كاميرا الهاتف الأساسية" لالتقاط الصور.');
             close();
+            openCameraPermissionModal(new Error('الكاميرا المباشرة غير مدعومة في هذا المتصفح'));
             return;
         }
 
@@ -1845,8 +1845,9 @@ const DocScanner = (function () {
                 video.srcObject = stream;
                 await video.play();
             } catch (err2) {
-                alert('تعذر فتح الكاميرا: ' + (err2.message || 'يرجى التأكد من إعطاء إذن الكاميرا للتطبيق'));
+                console.warn('Camera stream error:', err2);
                 close();
+                openCameraPermissionModal(err2);
             }
         }
     }
@@ -1980,6 +1981,52 @@ const DocScanner = (function () {
         lastCroppedBlob = null;
         document.getElementById('scanner-preview-wrap').classList.add('hidden');
         document.getElementById('scanner-controls-bar').classList.remove('hidden');
+        if (!stream) {
+            startCamera();
+        }
+    }
+
+    function handleSelectedPhoto(e) {
+        const file = e.target.files && e.target.files[0];
+        if (!file) return;
+        e.target.value = '';
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            const img = new Image();
+            img.onload = function() {
+                const modal = document.getElementById('modal-doc-scanner');
+                if (modal) modal.classList.remove('hidden');
+                stopCamera();
+
+                const canvas = document.createElement('canvas');
+                const padX = Math.round(img.width * 0.02);
+                const padY = Math.round(img.height * 0.02);
+                const cropX = padX;
+                const cropY = padY;
+                const cropW = Math.max(100, img.width - (padX * 2));
+                const cropH = Math.max(100, img.height - (padY * 2));
+
+                canvas.width = cropW;
+                canvas.height = cropH;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
+
+                canvas.toBlob((blob) => {
+                    if (!blob) return;
+                    lastCroppedBlob = blob;
+                    const url = URL.createObjectURL(blob);
+                    const previewImg = document.getElementById('scanner-preview-img');
+                    if (previewImg) previewImg.src = url;
+
+                    document.getElementById('scanner-preview-wrap').classList.remove('hidden');
+                    document.getElementById('scanner-controls-bar').classList.add('hidden');
+                    if (window.refreshIcons) refreshIcons();
+                }, 'image/jpeg', 0.92);
+            };
+            img.src = evt.target.result;
+        };
+        reader.readAsDataURL(file);
     }
 
     function updateCounter() {
@@ -1988,7 +2035,22 @@ const DocScanner = (function () {
     }
 
     return {
-        open, close, switchCamera, snap, acceptAndNext, acceptAndFinish, retake
+        open, close, switchCamera, snap, acceptAndNext, acceptAndFinish, retake, handleSelectedPhoto
     };
 })();
 window.DocScanner = DocScanner;
+
+function openCameraPermissionModal(err) {
+    const modal = document.getElementById('modal-camera-permission');
+    if (modal) {
+        modal.classList.remove('hidden');
+        if (window.refreshIcons) refreshIcons();
+    }
+}
+
+function closeCameraPermissionModal() {
+    const modal = document.getElementById('modal-camera-permission');
+    if (modal) modal.classList.add('hidden');
+}
+window.openCameraPermissionModal = openCameraPermissionModal;
+window.closeCameraPermissionModal = closeCameraPermissionModal;
