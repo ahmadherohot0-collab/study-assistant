@@ -118,7 +118,7 @@
               </h1>
               <span class="text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 whitespace-nowrap flex items-center gap-1 shadow-xs">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>كاش: v5</span>
+                <span>كاش: v6</span>
               </span>
               <span class="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 whitespace-nowrap">
                 سحابي ومستقل 24/7 ⚡
@@ -295,15 +295,21 @@
             </div>
           </div>
 
-          <!-- Action buttons: Camera capture & File picker -->
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-            <button type="button" onclick="document.getElementById('camera-input').click()" class="py-3 px-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border-2 border-dashed border-indigo-300 dark:border-indigo-700 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-xs flex items-center justify-center gap-2 transition">
-              <i data-lucide="camera" class="w-5 h-5 text-indigo-600"></i>
-              <span>📸 التقاط صفحة بالكاميرا مباشرة</span>
+          <!-- Action buttons: Document Scanner, Native Camera & File picker -->
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2.5">
+            <button type="button" onclick="DocScanner.open()" class="py-3.5 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md hover:shadow-lg transition">
+              <i data-lucide="scan" class="w-5 h-5"></i>
+              <span>📐 ماسح المستندات (تحديد قياس الصفحة)</span>
             </button>
-            <button type="button" onclick="document.getElementById('file-input').click()" class="py-3 px-4 rounded-xl bg-brand-50 dark:bg-brand-950/60 border-2 border-dashed border-brand-300 dark:border-brand-700 hover:bg-brand-100 text-brand-700 dark:text-brand-300 font-bold text-xs flex items-center justify-center gap-2 transition">
-              <i data-lucide="image" class="w-5 h-5 text-brand-600"></i>
-              <span>📁 اختيار صور أو PDF من الجهاز</span>
+            <button type="button" onclick="document.getElementById('camera-input').click()" class="py-3.5 px-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 border-2 border-dashed border-indigo-300 dark:border-indigo-700 hover:bg-indigo-100 text-indigo-700 dark:text-indigo-300 font-bold text-xs flex items-center justify-center gap-2 transition">
+              <i data-lucide="camera" class="w-5 h-5 text-indigo-600"></i>
+              <span>📸 كاميرا الهاتف (وضع المستندات)</span>
+            </button>
+          </div>
+          <div class="mb-3">
+            <button type="button" onclick="document.getElementById('file-input').click()" class="w-full py-2.5 px-4 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs flex items-center justify-center gap-2 transition">
+              <i data-lucide="image" class="w-4 h-4 text-brand-600"></i>
+              <span>📁 أو اختيار صور من الألبوم أو ملف PDF</span>
             </button>
           </div>
 
@@ -936,7 +942,7 @@
 
       <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
         <span class="font-bold text-slate-600 dark:text-slate-400">إصدار النظام والكاش الحالي:</span>
-        <span class="font-black px-2.5 py-1 rounded-lg bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">كاش v5 (أحدث إصدار)</span>
+        <span class="font-black px-2.5 py-1 rounded-lg bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">كاش v6 (أحدث إصدار)</span>
       </div>
 
       <button onclick="saveSettings()" class="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-sm shadow transition">حفظ</button>
@@ -998,6 +1004,90 @@
           إلغاء
         </button>
       </div>
+    </div>
+  </div>
+
+  
+  <!-- MODAL: DOCUMENT SCANNER (CAMERA WITH RECTANGULAR BOUNDING BOX) -->
+  <div id="modal-doc-scanner" class="hidden fixed inset-0 z-50 bg-black flex flex-col justify-between select-none">
+    <!-- Scanner Top Bar -->
+    <div class="p-4 bg-black/75 backdrop-blur-md flex items-center justify-between text-white z-20 safe-header">
+      <div class="flex items-center gap-2.5">
+        <span class="p-2 rounded-xl bg-emerald-600 text-white font-black text-xs flex items-center gap-1.5 shadow-sm">
+          <i data-lucide="scan" class="w-4 h-4"></i>
+          <span>ماسح المستندات الذكي</span>
+        </span>
+        <span id="scanner-pages-count" class="text-xs text-emerald-300 font-black">0 صفحة ملتقطة</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button id="scanner-switch-cam-btn" onclick="DocScanner.switchCamera()" class="p-2.5 rounded-xl bg-white/20 hover:bg-white/30 text-white transition" title="تبديل الكاميرا">
+          <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+        </button>
+        <button onclick="DocScanner.close()" class="p-2.5 rounded-xl bg-white/20 hover:bg-rose-600 text-white transition" title="إغلاق">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Scanner Viewfinder & Rectangle Frame Guide -->
+    <div class="relative flex-1 flex items-center justify-center overflow-hidden bg-black">
+      <video id="scanner-video" autoplay playsinline muted class="absolute inset-0 w-full h-full object-cover"></video>
+
+      <!-- Semi-transparent overlay mask with cutout rectangle -->
+      <div class="absolute inset-0 pointer-events-none flex items-center justify-center p-4 sm:p-8">
+        <!-- The Document Guide Rectangle -->
+        <div id="scanner-guide-box" class="relative w-full max-w-xs sm:max-w-sm aspect-[1/1.42] rounded-2xl border-2 border-emerald-400 shadow-[0_0_0_9999px_rgba(0,0,0,0.65)] flex flex-col justify-between p-3.5 transition-all duration-200">
+          <!-- 4 Corner Brackets for Document Alignment -->
+          <div class="flex justify-between">
+            <div class="w-7 h-7 border-t-4 border-r-4 border-emerald-400 rounded-tr-lg"></div>
+            <div class="w-7 h-7 border-t-4 border-l-4 border-emerald-400 rounded-tl-lg"></div>
+          </div>
+
+          <!-- Center Guide Helper -->
+          <div class="text-center py-2 px-3 rounded-xl bg-black/70 backdrop-blur-md mx-auto text-emerald-300 font-bold text-xs shadow-md border border-emerald-500/40">
+            📐 اضبط حدود ورقة الكتاب داخل هذا المستطيل
+          </div>
+
+          <div class="flex justify-between">
+            <div class="w-7 h-7 border-b-4 border-r-4 border-emerald-400 rounded-br-lg"></div>
+            <div class="w-7 h-7 border-b-4 border-l-4 border-emerald-400 rounded-bl-lg"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Preview overlay (shown immediately after capture) -->
+      <div id="scanner-preview-wrap" class="hidden absolute inset-0 bg-slate-950/95 z-30 flex flex-col items-center justify-between p-4 safe-header overflow-y-auto">
+        <div class="text-center text-white space-y-1 pt-2">
+          <h4 class="text-base font-black text-emerald-400">معاينة الصفحة المقصوصة بدقة ✨</h4>
+          <p class="text-xs text-slate-300">تم قص حدود الصفحة وإزالة كل ما هو خارج الكتاب</p>
+        </div>
+        <div class="flex-1 flex items-center justify-center p-2 max-h-[60vh] w-full my-auto">
+          <img id="scanner-preview-img" class="max-h-full max-w-full rounded-2xl shadow-2xl border-2 border-emerald-500/60 object-contain bg-white">
+        </div>
+        <div class="w-full max-w-sm space-y-2 pb-2">
+          <button onclick="DocScanner.acceptAndNext()" class="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-lg flex items-center justify-center gap-2 transition active:scale-98">
+            <i data-lucide="check" class="w-5 h-5"></i>
+            <span>✓ اعتماد والتقاط صفحة تالية ➕</span>
+          </button>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="DocScanner.acceptAndFinish()" class="py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow transition active:scale-98">
+              حفظ والعودة للدرس
+            </button>
+            <button onclick="DocScanner.retake()" class="py-3 rounded-xl bg-white/20 hover:bg-white/30 text-white font-bold text-xs transition active:scale-98">
+              🔄 إعادة الالتقاط
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Scanner Bottom Controls -->
+    <div id="scanner-controls-bar" class="p-6 bg-black/75 backdrop-blur-md flex items-center justify-center z-20">
+      <button onclick="DocScanner.snap()" class="group relative w-20 h-20 rounded-full border-4 border-white flex items-center justify-center transition active:scale-95 shadow-2xl" title="التقاط الصفحة وقصها">
+        <div class="w-16 h-16 rounded-full bg-emerald-500 group-hover:bg-emerald-400 flex items-center justify-center text-white transition shadow-inner">
+          <i data-lucide="camera" class="w-8 h-8"></i>
+        </div>
+      </button>
     </div>
   </div>
 
