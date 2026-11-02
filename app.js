@@ -319,7 +319,10 @@ function renderBooksGrid(books) {
                         <i data-lucide="trash-2" class="w-4 h-4"></i>
                     </button>
                 </div>
-                <h3 class="text-base font-black text-slate-900 dark:text-white mb-1.5 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition">${escapeHtml(book.name)}</h3>
+                <h3 class="text-base font-black text-slate-900 dark:text-white mb-1.5 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition cursor-pointer flex items-center justify-between" onclick="openSummaries(${book.id})">
+                    <span>${escapeHtml(book.name)}</span>
+                    <span class="text-[11px] text-brand-600 dark:text-brand-400 font-bold hover:underline">فتح الفصول ←</span>
+                </h3>
                 <p class="text-xs text-slate-500 dark:text-slate-400 line-clamp-2 mb-4">${escapeHtml(book.description || 'لا يوجد وصف للمادة')}</p>
             </div>
 
@@ -327,7 +330,7 @@ function renderBooksGrid(books) {
                 <div class="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
                     <span class="flex items-center gap-1.5">
                         <i data-lucide="file-text" class="w-3.5 h-3.5 text-indigo-500"></i>
-                        <span>${book.materials_count || 0} جلسة دراسة</span>
+                        <span>${book.materials_count || 0} فصول ومواضيع</span>
                     </span>
                     <span class="flex items-center gap-1.5">
                         <i data-lucide="help-circle" class="w-3.5 h-3.5 text-amber-500"></i>
@@ -337,7 +340,7 @@ function renderBooksGrid(books) {
                 <div class="grid grid-cols-2 gap-2">
                     <button onclick="prepareUploadForBook(${book.id})" class="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-50 dark:hover:bg-brand-950/50 text-slate-700 dark:text-slate-200 hover:text-brand-600 dark:hover:text-brand-400 text-xs font-bold transition flex items-center justify-center gap-1.5">
                         <i data-lucide="upload" class="w-3.5 h-3.5"></i>
-                        <span>إضافة مادة</span>
+                        <span>إضافة فصل</span>
                     </button>
                     <button onclick="quickQuizForBook(${book.id})" class="px-3 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-md shadow-brand-500/20">
                         <i data-lucide="play" class="w-3.5 h-3.5"></i>
@@ -346,7 +349,7 @@ function renderBooksGrid(books) {
                 </div>
                 <button onclick="openSummaries(${book.id})" class="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold transition flex items-center justify-center gap-1.5">
                     <i data-lucide="book-open-text" class="w-3.5 h-3.5"></i>
-                    <span>الملخصات · استماع · خرائط ذهنية</span>
+                    <span>📖 الفصول والملخصات والاختبارات</span>
                 </button>
             </div>
         `;
@@ -456,10 +459,13 @@ async function deleteBook(bookId, bookName) {
     }
 }
 
-function prepareUploadForBook(bookId) {
+async function prepareUploadForBook(bookId) {
     switchTab('upload');
     const select = document.getElementById('upload-book-select');
-    if (select) select.value = bookId;
+    if (select) {
+        select.value = bookId;
+        await onUploadBookChange();
+    }
 }
 
 function quickQuizForBook(bookId) {
@@ -526,23 +532,45 @@ async function submitStudyMaterial() {
 
         if (processingStep) processingStep.innerText = 'جاري حفظ الملخص وبنك الأسئلة في الذاكرة الدائمة...';
 
-        // Save material to IndexedDB
-        const newMaterialId = await window.studyDB.addMaterial({
-            book_id: bookId,
-            title: title,
-            page_range: pageRange,
-            extracted_text: textNotes,
-            summary: aiResult.summary || '',
-            file_type: processedImages.length > 0 ? 'image' : 'text',
-            files_json: JSON.stringify({ count: processedImages.length })
-        });
+        const targetMode = (document.querySelector('input[name="upload-target-mode"]:checked') || {}).value || 'new';
+        const existingSelect = document.getElementById('upload-existing-material-select');
+        const existingMatId = existingSelect ? existingSelect.value : '';
 
-        // Save questions to IndexedDB
+        let targetMaterialId = null;
+        let finalSummary = aiResult.summary || '';
+
+        if (targetMode === 'append' && existingMatId) {
+            // Append to existing chapter
+            targetMaterialId = Number(existingMatId);
+            const existingMat = await window.studyDB.getMaterial(targetMaterialId);
+            if (existingMat) {
+                const combinedSummary = (existingMat.summary || '') + '\n\n---\n\n### 📄 إلحاق صفحات إضافية (' + (pageRange || 'تكملة') + '):\n' + (aiResult.summary || '');
+                const combinedPages = existingMat.page_range ? (existingMat.page_range + ' ، ' + (pageRange || 'صفحات جديدة')) : (pageRange || '');
+                await window.studyDB.updateMaterial(targetMaterialId, {
+                    summary: combinedSummary,
+                    page_range: combinedPages
+                });
+                finalSummary = combinedSummary;
+            }
+        } else {
+            // Create brand new chapter
+            targetMaterialId = await window.studyDB.addMaterial({
+                book_id: bookId,
+                title: title,
+                page_range: pageRange,
+                extracted_text: textNotes,
+                summary: aiResult.summary || '',
+                file_type: processedImages.length > 0 ? 'image' : 'text',
+                files_json: JSON.stringify({ count: processedImages.length })
+            });
+        }
+
+        // Save newly generated questions under the target chapter
         const questions = aiResult.questions || [];
         for (const q of questions) {
             await window.studyDB.addQuestion({
                 book_id: bookId,
-                material_id: newMaterialId,
+                material_id: targetMaterialId,
                 type: q.type || 'mcq',
                 question: q.question,
                 options: q.options || [],
@@ -553,12 +581,16 @@ async function submitStudyMaterial() {
         }
 
         lastUploadedMaterial = {
-            id: newMaterialId,
+            id: targetMaterialId,
             book_id: Number(bookId),
             title: title,
-            summary: aiResult.summary,
+            summary: finalSummary,
             questions_count: questions.length
         };
+
+        if (typeof showToast === 'function') {
+            showToast(targetMode === 'append' ? '✨ تم بنجاح إلحاق الصفحات وتوسيع بنك أسئلة الفصل!' : '✅ تم حفظ الفصل الجديد وبنك الأسئلة بنجاح!', 'success');
+        }
 
         // Reset form inputs
         titleInput.value = '';
@@ -644,22 +676,39 @@ async function startQuiz() {
     try {
         let quizQuestions = [];
 
+        const matSelect = document.getElementById('quiz-material-select');
+        const selectedMaterialId = matSelect ? matSelect.value : 'all';
+        let activeMaterialTitle = '';
+
         if (isFreshAI) {
-            // Fetch book materials summary
-            const materials = await window.studyDB.getMaterials(bookId);
-            const combinedSummary = materials.map(m => `### ${m.title}\n${m.summary}`).join('\n\n');
+            let combinedSummary = '';
+            if (selectedMaterialId !== 'all') {
+                const mat = await window.studyDB.getMaterial(selectedMaterialId);
+                if (mat) {
+                    activeMaterialTitle = mat.title;
+                    combinedSummary = `### ${mat.title}\n${mat.summary || ''}`;
+                }
+            } else {
+                const materials = await window.studyDB.getMaterials(bookId);
+                combinedSummary = materials.map(m => `### ${m.title}\n${m.summary}`).join('\n\n');
+            }
 
             if (!combinedSummary.trim()) {
-                alert('لا يوجد ملخص للمادة بعد! يرجى إضافة صفحات للمادة أولاً أو اختيار وضع بنك الأسئلة.');
+                alert('لا يوجد ملخص للمادة أو الفصل بعد! يرجى إضافة صفحات أولاً أو اختيار وضع بنك الأسئلة.');
                 if (submittingScreen) submittingScreen.classList.add('hidden');
                 if (setupScreen) setupScreen.classList.remove('hidden');
                 return;
             }
 
-            quizQuestions = await window.studyAI.generateFreshQuiz(bookName, combinedSummary, count, selectedType);
+            const quizTopicName = activeMaterialTitle ? `${bookName} - ${activeMaterialTitle}` : bookName;
+            quizQuestions = await window.studyAI.generateFreshQuiz(quizTopicName, combinedSummary, count, selectedType);
         } else {
-            // Retrieve from local questions bank
-            let allQs = await window.studyDB.getQuestions(bookId);
+            // Retrieve from local questions bank (scoped to chapter if selected)
+            let allQs = await window.studyDB.getQuestions(bookId, selectedMaterialId);
+            if (selectedMaterialId !== 'all') {
+                const mat = await window.studyDB.getMaterial(selectedMaterialId);
+                if (mat) activeMaterialTitle = mat.title;
+            }
             if (allQs.length === 0) {
                 alert('بنك الأسئلة فارغ لهذه المادة! اضغط على (أسئلة جديدة متجددة 🌟) أو ارفع صفحات جديدة.');
                 if (submittingScreen) submittingScreen.classList.add('hidden');
@@ -709,7 +758,8 @@ async function startQuiz() {
         if (activeScreen) activeScreen.classList.remove('hidden');
 
         const activeTitle = document.getElementById('quiz-active-title');
-        if (activeTitle) activeTitle.innerText = `${bookName} (${isFreshAI ? 'أسئلة متجددة 🌟' : 'بنك الأسئلة'})`;
+        const titleScope = activeMaterialTitle ? `${bookName} - ${activeMaterialTitle}` : bookName;
+        if (activeTitle) activeTitle.innerText = `${titleScope} (${isFreshAI ? 'أسئلة متجددة 🌟' : 'بنك الأسئلة'})`;
 
         renderActiveQuestion();
         if (window.QuizTimer) QuizTimer.start(quizQuestions.length);
@@ -1458,4 +1508,280 @@ function openQrModal() {
 function closeQrModal() {
     const modal = document.getElementById('modal-qr');
     if (modal) modal.classList.add('hidden');
+}
+
+
+// =====================================================================
+// CHAPTER / TOPIC MANAGEMENT & APPENDING PAGES
+// =====================================================================
+
+async function onUploadBookChange() {
+    const bookSelect = document.getElementById('upload-book-select');
+    const bookId = bookSelect ? bookSelect.value : '';
+    const targetContainer = document.getElementById('upload-target-container');
+    const existingSelect = document.getElementById('upload-existing-material-select');
+
+    if (!bookId) {
+        if (targetContainer) targetContainer.classList.add('hidden');
+        return;
+    }
+
+    try {
+        const materials = await window.studyDB.getMaterials(bookId);
+        if (materials && materials.length > 0) {
+            if (targetContainer) targetContainer.classList.remove('hidden');
+            if (existingSelect) {
+                existingSelect.innerHTML = '<option value="">-- اختر فصلاً من هذا الكتاب --</option>';
+                materials.forEach(m => {
+                    const opt = document.createElement('option');
+                    opt.value = m.id;
+                    opt.textContent = `${m.title} ${m.page_range ? '(' + m.page_range + ')' : ''}`;
+                    existingSelect.appendChild(opt);
+                });
+            }
+        } else {
+            if (targetContainer) targetContainer.classList.add('hidden');
+            resetUploadTargetToNew();
+        }
+    } catch (e) {
+        console.warn('onUploadBookChange error:', e);
+    }
+}
+
+function onUploadTargetModeChange() {
+    const modeRadio = document.querySelector('input[name="upload-target-mode"]:checked');
+    const isAppend = modeRadio && modeRadio.value === 'append';
+    const wrap = document.getElementById('upload-existing-wrap');
+    const labelNew = document.getElementById('label-target-new');
+    const labelAppend = document.getElementById('label-target-append');
+    const titleInput = document.getElementById('upload-title');
+    const pagesInput = document.getElementById('upload-pages');
+
+    if (isAppend) {
+        if (wrap) wrap.classList.remove('hidden');
+        if (labelAppend) {
+            labelAppend.className = 'p-3 rounded-xl border-2 border-brand-500 bg-brand-50/60 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 cursor-pointer flex items-center gap-2 transition';
+        }
+        if (labelNew) {
+            labelNew.className = 'p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:border-brand-300 text-slate-600 dark:text-slate-300 cursor-pointer flex items-center gap-2 transition';
+        }
+        onUploadExistingMaterialChange();
+    } else {
+        if (wrap) wrap.classList.add('hidden');
+        if (labelNew) {
+            labelNew.className = 'p-3 rounded-xl border-2 border-brand-500 bg-brand-50/60 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 cursor-pointer flex items-center gap-2 transition';
+        }
+        if (labelAppend) {
+            labelAppend.className = 'p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:border-brand-300 text-slate-600 dark:text-slate-300 cursor-pointer flex items-center gap-2 transition';
+        }
+        if (titleInput) {
+            titleInput.readOnly = false;
+            titleInput.placeholder = 'مثال: الباب الأول - مقدمة وتعاريف';
+        }
+        if (pagesInput) {
+            pagesInput.placeholder = 'مثال: ص 15 إلى 18';
+        }
+    }
+}
+
+async function onUploadExistingMaterialChange() {
+    const existingSelect = document.getElementById('upload-existing-material-select');
+    const titleInput = document.getElementById('upload-title');
+    const pagesInput = document.getElementById('upload-pages');
+    if (!existingSelect || !titleInput) return;
+
+    const matId = existingSelect.value;
+    if (!matId) return;
+
+    try {
+        const mat = await window.studyDB.getMaterial(matId);
+        if (mat) {
+            titleInput.value = mat.title;
+            if (pagesInput) {
+                pagesInput.placeholder = `مثال: صفحات إضافية بعد ${mat.page_range || 'السابقة'}`;
+            }
+        }
+    } catch (e) {
+        console.warn('onUploadExistingMaterialChange error:', e);
+    }
+}
+
+function resetUploadTargetToNew() {
+    const radioNew = document.querySelector('input[name="upload-target-mode"][value="new"]');
+    if (radioNew) {
+        radioNew.checked = true;
+        onUploadTargetModeChange();
+    }
+}
+
+async function prepareAddPagesToChapter(bookId, materialId) {
+    if (window.Library) Library.close();
+    switchTab('upload');
+
+    const select = document.getElementById('upload-book-select');
+    if (select) {
+        select.value = bookId;
+        await onUploadBookChange();
+    }
+
+    const radioAppend = document.querySelector('input[name="upload-target-mode"][value="append"]');
+    if (radioAppend) {
+        radioAppend.checked = true;
+        onUploadTargetModeChange();
+    }
+
+    const existingSelect = document.getElementById('upload-existing-material-select');
+    if (existingSelect) {
+        existingSelect.value = materialId;
+        await onUploadExistingMaterialChange();
+    }
+
+    const targetContainer = document.getElementById('upload-target-container');
+    if (targetContainer) {
+        targetContainer.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    if (typeof showToast === 'function') {
+        showToast('📖 جاهز لإلحاق صفحات جديدة بهذا الفصل! التقط الصور أو ارفعها.', 'info');
+    }
+}
+
+async function onQuizBookChange() {
+    const bookSelect = document.getElementById('quiz-book-select');
+    const bookId = bookSelect ? bookSelect.value : '';
+    const matSelect = document.getElementById('quiz-material-select');
+    if (!bookId) return;
+
+    if (matSelect) {
+        matSelect.innerHTML = '<option value="all">🎯 جميع فصول ومواضيع المادة (امتحان شامل لكل الكتاب)</option>';
+        try {
+            const materials = await window.studyDB.getMaterials(bookId);
+            materials.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m.id;
+                opt.textContent = `📖 ${m.title} ${m.page_range ? '(' + m.page_range + ')' : ''}`;
+                matSelect.appendChild(opt);
+            });
+        } catch (e) {
+            console.warn(e);
+        }
+    }
+
+    onQuizMaterialChange();
+}
+
+async function onQuizMaterialChange() {
+    const bookSelect = document.getElementById('quiz-book-select');
+    const matSelect = document.getElementById('quiz-material-select');
+    const badge = document.getElementById('quiz-available-badge');
+    if (!bookSelect || !badge) return;
+
+    const bookId = bookSelect.value;
+    const matId = matSelect ? matSelect.value : 'all';
+    if (!bookId) return;
+
+    try {
+        const questions = await window.studyDB.getQuestions(bookId, matId);
+        if (matId === 'all') {
+            badge.innerText = `💡 بنك الأسئلة يحتوي على ${questions.length} سؤال لهذه المادة (شامل جميع الفصول)`;
+        } else {
+            const mat = await window.studyDB.getMaterial(matId);
+            const title = mat ? mat.title : 'هذا الفصل';
+            badge.innerText = `💡 بنك الأسئلة يحتوي على ${questions.length} سؤال لـ "${title}"`;
+        }
+    } catch (e) {
+        console.warn(e);
+    }
+}
+
+async function startQuizForChapter(bookId, materialId) {
+    if (window.Library) Library.close();
+    switchTab('quiz');
+
+    const select = document.getElementById('quiz-book-select');
+    if (select) {
+        select.value = bookId;
+        await onQuizBookChange();
+    }
+
+    const matSelect = document.getElementById('quiz-material-select');
+    if (matSelect) {
+        matSelect.value = materialId;
+        await onQuizMaterialChange();
+    }
+
+    const screen = document.getElementById('quiz-setup-screen');
+    if (screen) screen.scrollIntoView({ behavior: 'smooth' });
+}
+
+// Chapter Edit Modal functions
+async function openEditChapterModal(id) {
+    try {
+        const mat = await window.studyDB.getMaterial(id);
+        if (!mat) {
+            alert('الفصل غير موجود');
+            return;
+        }
+        const idInput = document.getElementById('edit-chapter-id');
+        const titleInput = document.getElementById('edit-chapter-title');
+        const pagesInput = document.getElementById('edit-chapter-pages');
+        const modal = document.getElementById('modal-edit-chapter');
+
+        if (idInput) idInput.value = mat.id;
+        if (titleInput) titleInput.value = mat.title;
+        if (pagesInput) pagesInput.value = mat.page_range || '';
+        if (modal) modal.classList.remove('hidden');
+    } catch (e) {
+        alert('تعذر فتح التعديل: ' + e.message);
+    }
+}
+
+function closeEditChapterModal() {
+    const modal = document.getElementById('modal-edit-chapter');
+    if (modal) modal.classList.add('hidden');
+}
+
+async function saveChapterEdit() {
+    const id = document.getElementById('edit-chapter-id').value;
+    const title = document.getElementById('edit-chapter-title').value.trim();
+    const pageRange = document.getElementById('edit-chapter-pages').value.trim();
+
+    if (!id || !title) {
+        alert('يرجى إدخال عنوان الفصل أو الموضوع');
+        return;
+    }
+
+    try {
+        await window.studyDB.updateMaterial(id, {
+            title: title,
+            page_range: pageRange
+        });
+        closeEditChapterModal();
+        if (window.Library && Library.getCurrentBook) {
+            Library.open(Library.getCurrentBook());
+        }
+        await loadBooks();
+        if (typeof showToast === 'function') {
+            showToast('✅ تم حفظ تعديلات الفصل بنجاح!', 'success');
+        }
+    } catch (e) {
+        alert('فشل حفظ التعديل: ' + e.message);
+    }
+}
+
+async function deleteChapter(id) {
+    if (!confirm('هل أنت متأكد من حذف هذا الفصل بالكامل مع جميع أسئلته وبطاقاته؟')) return;
+    try {
+        await window.studyDB.deleteMaterial(id);
+        if (window.Library && Library.getCurrentBook) {
+            Library.open(Library.getCurrentBook());
+        }
+        await loadBooks();
+        await loadStats();
+        if (typeof showToast === 'function') {
+            showToast('🗑️ تم حذف الفصل بنجاح', 'info');
+        }
+    } catch (e) {
+        alert('فشل حذف الفصل: ' + e.message);
+    }
 }
