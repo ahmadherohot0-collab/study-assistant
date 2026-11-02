@@ -868,23 +868,59 @@
       const list = (await studyDB.getMaterials(bid)).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       materials = new Map(list.map((m) => [Number(m.id), m]));
       if (!list.length) {
-        body.innerHTML = '<p class="text-center text-slate-400 py-10">لا توجد دروس مضافة لهذه المادة بعد.</p>';
+        body.innerHTML = `
+          <div class="py-12 text-center space-y-3">
+            <div class="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-950/60 text-brand-600 mx-auto flex items-center justify-center">
+              <i data-lucide="book-open" class="w-6 h-6"></i>
+            </div>
+            <p class="font-bold text-slate-700 dark:text-slate-300">لا توجد فصول أو مواضيع مضافة لهذا الكتاب بعد</p>
+            <button onclick="Library.close(); prepareUploadForBook(${currentBook});" class="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs shadow transition">
+              ➕ إضافة أول فصل الآن
+            </button>
+          </div>`;
+        if (window.refreshIcons) refreshIcons();
         return;
       }
       body.innerHTML = list.map((m) => {
         const text = materialText(m);
         const date = m.created_at ? new Date(m.created_at).toLocaleDateString('ar-EG', { year: 'numeric', month: 'short', day: 'numeric' }) : '';
         return `
-          <details class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden">
-            <summary class="cursor-pointer p-4 flex items-center justify-between gap-3 font-black text-sm text-slate-800 dark:text-white">
-              <span>${esc(m.title)} <span class="text-[11px] font-semibold text-slate-400">${esc(m.page_range || '')}</span></span>
+          <details class="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-xs">
+            <summary class="cursor-pointer p-4 flex items-center justify-between gap-3 font-black text-sm text-slate-800 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+              <div class="flex items-center gap-2.5">
+                <span class="w-8 h-8 rounded-xl bg-brand-50 dark:bg-brand-950/60 text-brand-600 dark:text-brand-400 flex items-center justify-center text-xs font-black shrink-0">📖</span>
+                <div>
+                  <div class="text-sm font-black text-slate-900 dark:text-white">${esc(m.title)}</div>
+                  <div class="text-[11px] font-semibold text-slate-400">${esc(m.page_range || 'بدون تحديد صفحات')}</div>
+                </div>
+              </div>
               <span class="text-[11px] font-semibold text-slate-400 shrink-0">${esc(date)}</span>
             </summary>
             <div class="p-4 border-t border-slate-100 dark:border-slate-800 space-y-4">
+              <!-- Quick Actions for this specific chapter -->
+              <div class="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <button onclick="prepareAddPagesToChapter(${currentBook}, ${m.id})" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs" title="إضافة وتصوير صفحات جديدة لهذا الفصل ودمجها معه">
+                    <span>➕ إضافة صفحات لهذا الفصل</span>
+                  </button>
+                  <button onclick="startQuizForChapter(${currentBook}, ${m.id})" class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold transition flex items-center gap-1 shadow-xs" title="بدء اختبار مخصص لأسئلة هذا الفصل فقط">
+                    <span>🎯 اختبرني في هذا الفصل</span>
+                  </button>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <button onclick="openEditChapterModal(${m.id})" class="px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-bold transition" title="تعديل اسم أو صفحات الفصل">
+                    ✏️ تعديل
+                  </button>
+                  <button onclick="deleteChapter(${m.id})" class="px-2.5 py-1.5 rounded-lg border border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-600 text-xs font-bold transition" title="حذف هذا الفصل وأسئلته">
+                    🗑️ حذف
+                  </button>
+                </div>
+              </div>
+
               ${text ? `
               <div class="flex flex-wrap gap-2">
                 <button onclick="Library.speak(${m.id}, this)" class="px-3 py-1.5 rounded-xl bg-indigo-600 text-white text-xs font-bold">🔊 استمع للملخص</button>
-                <button onclick="Library.cards(${m.id}, this)" class="px-3 py-1.5 rounded-xl bg-amber-500 text-white text-xs font-bold">🃏 بطاقات من هذا الدرس</button>
+                <button onclick="Library.cards(${m.id}, this)" class="px-3 py-1.5 rounded-xl bg-amber-500 text-white text-xs font-bold">🃏 بطاقات هذا الدرس</button>
                 <button onclick="Library.aid(${m.id}, 'table', this)" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold">📊 جدول مقارنة</button>
                 <button onclick="Library.aid(${m.id}, 'mindmap', this)" class="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-bold">🧠 خريطة ذهنية</button>
               </div>
@@ -893,6 +929,7 @@
             </div>
           </details>`;
       }).join('');
+      if (window.refreshIcons) refreshIcons();
     }
 
     function close() {
@@ -924,7 +961,7 @@
       }
     }
 
-    return { open, close, speak, cards, aid };
+    return { open, close, speak, cards, aid, getCurrentBook: () => currentBook };
   })();
   window.Library = Library;
   window.openSummaries = (bid) => Library.open(bid);
