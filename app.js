@@ -1801,7 +1801,7 @@ const DocScanner = (function () {
         try {
             if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
                 const devices = await navigator.mediaDevices.enumerateDevices();
-                videoDevices = devices.filter(d => d.kind === 'videoinput');
+                videoDevices = devices.filter(d => d.kind === 'videoinput' && d.deviceId && d.deviceId.trim() !== '');
             }
         } catch (e) {
             console.warn('enumerateDevices error:', e);
@@ -1815,46 +1815,119 @@ const DocScanner = (function () {
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
             close();
-            openCameraPermissionModal(new Error('الكاميرا المباشرة غير مدعومة في هذا المتصفح'));
+            openCameraPermissionModal(new Error('متصفحك لا يدعم البث المباشر للكاميرا'));
             return;
         }
 
-        const constraints = {
-            audio: false,
-            video: {
-                facingMode: { ideal: "environment" },
-                width: { ideal: 1920, min: 1280 },
-                height: { ideal: 1080, min: 720 }
-            }
-        };
+        const candidates = [];
 
-        if (videoDevices.length > 0 && videoDevices[currentDeviceIdx]) {
-            constraints.video.deviceId = { exact: videoDevices[currentDeviceIdx].deviceId };
-            delete constraints.video.facingMode;
+        // If user explicitly switched cameras and we have a valid non-empty deviceId:
+        if (videoDevices.length > 0 && videoDevices[currentDeviceIdx] && videoDevices[currentDeviceIdx].deviceId) {
+            candidates.push({
+                audio: false,
+                video: {
+                    deviceId: { exact: videoDevices[currentDeviceIdx].deviceId }
+                }
+            });
+        }
+
+        // Sequential fallback candidate constraints from HD environment to bare minimum
+        candidates.push(
+            {
+                audio: false,
+                video: {
+                    facingMode: { ideal: "environment" },
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }
+            },
+            {
+                audio: false,
+                video: {
+                    facingMode: { ideal: "environment" }
+                }
+            },
+            {
+                audio: false,
+                video: {
+                    facingMode: "environment"
+                }
+            },
+            {
+                audio: false,
+                video: true
+            }
+        );
+
+        let lastErr = null;
+        for (const c of candidates) {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(c);
+                if (stream) break;
+            } catch (err) {
+                lastErr = err;
+                console.warn('getUserMedia candidate attempt failed:', c, err);
+            }
+        }
+
+        if (!stream) {
+            console.error('All camera attempts failed:', lastErr);
+            close();
+            openCameraPermissionModal(lastErr || new Error('تعذر تشغيل الكاميرا'));
+            return;
         }
 
         try {
-            stream = await navigator.mediaDevices.getUserMedia(constraints);
+            video.muted = true;
+            video.playsInline = true;
+            video.setAttribute('playsinline', 'true');
+            video.setAttribute('muted', 'true');
+            video.setAttribute('autoplay', 'true');
             video.srcObject = stream;
-            await video.play();
-        } catch (err) {
-            console.error('Camera access error:', err);
-            // Fallback try simple video: true
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
-                video.srcObject = stream;
-                await video.play();
-            } catch (err2) {
-                console.warn('Camera stream error:', err2);
-                close();
-                openCameraPermissionModal(err2);
-            }
+
+            await new Promise((resolve) => {
+                let finished = false;
+                const done = () => {
+                    if (!finished) {
+                        finished = true;
+                        resolve();
+                    }
+                };
+
+                video.onloadedmetadata = () => {
+                    const p = video.play();
+                    if (p && p.then) {
+                        p.then(done).catch((e) => {
+                            console.warn('video.play() warning:', e);
+                            done();
+                        });
+                    } else {
+                        done();
+                    }
+                };
+
+                if (video.readyState >= 2) {
+                    const p = video.play();
+                    if (p && p.then) p.then(done).catch(done);
+                    else done();
+                }
+
+                // Safety timeout
+                setTimeout(done, 1200);
+            });
+
+            // Populate devices now that permission is granted
+            await initDevices();
+        } catch (e) {
+            console.warn('Video stream attach error:', e);
         }
     }
 
     function stopCamera() {
         if (stream) {
-            stream.getTracks().forEach(t => t.stop());
+            try {
+                stream.getTracks().forEach(t => t.stop());
+            } catch (e) {}
             stream = null;
         }
         const video = document.getElementById('scanner-video');
@@ -1870,7 +1943,6 @@ const DocScanner = (function () {
         capturedCount = 0;
         updateCounter();
 
-        await initDevices();
         await startCamera();
         if (window.refreshIcons) refreshIcons();
     }
@@ -1883,8 +1955,11 @@ const DocScanner = (function () {
 
     async function switchCamera() {
         if (videoDevices.length < 2) {
-            if (typeof showToast === 'function') showToast('لا توجد كاميرا أخرى متاحة', 'info');
-            return;
+            await initDevices();
+            if (videoDevices.length < 2) {
+                if (typeof showToast === 'function') showToast('لا توجد كاميرا أخرى متاحة', 'info');
+                return;
+            }
         }
         currentDeviceIdx = (currentDeviceIdx + 1) % videoDevices.length;
         await startCamera();
@@ -1900,11 +1975,9 @@ const DocScanner = (function () {
 
         if (navigator.vibrate) navigator.vibrate(50);
 
-        // Bounding rects for precise viewport cropping
         const vRect = video.getBoundingClientRect();
         const gRect = guide.getBoundingClientRect();
 
-        // Calculate aspect ratios & actual video offsets (object-cover)
         const videoRatio = video.videoWidth / video.videoHeight;
         const elemRatio = vRect.width / vRect.height;
 
@@ -1962,6 +2035,9 @@ const DocScanner = (function () {
         acceptCurrent();
         document.getElementById('scanner-preview-wrap').classList.add('hidden');
         document.getElementById('scanner-controls-bar').classList.remove('hidden');
+        if (!stream) {
+            startCamera();
+        }
         if (typeof showToast === 'function') {
             showToast(`✓ تم حفظ الصفحة (${capturedCount})! وجّه الكاميرا للصفحة التالية.`, 'success');
         }
@@ -1984,6 +2060,11 @@ const DocScanner = (function () {
         if (!stream) {
             startCamera();
         }
+    }
+
+    function updateCounter() {
+        const el = document.getElementById('scanner-pages-count');
+        if (el) el.textContent = `${capturedCount} صفحة ملتقطة`;
     }
 
     function handleSelectedPhoto(e) {
@@ -2029,11 +2110,6 @@ const DocScanner = (function () {
         reader.readAsDataURL(file);
     }
 
-    function updateCounter() {
-        const el = document.getElementById('scanner-pages-count');
-        if (el) el.textContent = `${capturedCount} صفحة ملتقطة`;
-    }
-
     return {
         open, close, switchCamera, snap, acceptAndNext, acceptAndFinish, retake, handleSelectedPhoto
     };
@@ -2042,10 +2118,37 @@ window.DocScanner = DocScanner;
 
 function openCameraPermissionModal(err) {
     const modal = document.getElementById('modal-camera-permission');
-    if (modal) {
-        modal.classList.remove('hidden');
-        if (window.refreshIcons) refreshIcons();
+    if (!modal) return;
+
+    const titleEl = document.getElementById('camera-modal-title');
+    const descEl = document.getElementById('camera-modal-desc');
+    const errDetailsEl = document.getElementById('camera-modal-err-details');
+
+    let title = "الكاميرا المباشرة غير متاحة حالياً";
+    let desc = "لم نتمكن من تشغيل البث المباشر للكاميرا داخل المتصفح. يمكنك التصوير مباشرة بكاميرا الهاتف (مع وضع المستندات) أو اختيار صورة لقصها الآن:";
+
+    if (err) {
+        const errName = err.name || '';
+        const errMsg = err.message || err.toString();
+        if (errDetailsEl) {
+            errDetailsEl.textContent = `التشخيص الفني: ${errName} - ${errMsg}`;
+            errDetailsEl.classList.remove('hidden');
+        }
+
+        if (errName === 'NotReadableError' || errName === 'TrackStartError') {
+            title = "الكاميرا قيد الاستخدام بواسطة تطبيق آخر ⚠️";
+            desc = "حساس الكاميرا محجوز حالياً بواسطة تطبيق آخر (مثل تطبيق الكاميرا الأساسي أو فلاش الهاتف). يرجى إغلاق تطبيقات الكاميرا المفتوحة في الخلفية، أو استخدام زر كاميرا الهاتف أدناه.";
+        } else if (errName === 'NotAllowedError' || errName === 'PermissionDeniedError') {
+            title = "إذن الكاميرا محظور في المتصفح 🔒";
+            desc = "المتصفح يمنع تشغيل البث المباشر للموقع. يمكنك منح الإذن من رمز القفل 🔒 أعلى الشاشة، أو استخدام كاميرا الهاتف مباشرة أدناه:";
+        }
     }
+
+    if (titleEl) titleEl.textContent = title;
+    if (descEl) descEl.textContent = desc;
+
+    modal.classList.remove('hidden');
+    if (window.refreshIcons) refreshIcons();
 }
 
 function closeCameraPermissionModal() {
