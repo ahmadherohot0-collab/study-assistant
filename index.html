@@ -118,7 +118,7 @@
               </h1>
               <span class="text-[10px] sm:text-xs font-black px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800 whitespace-nowrap flex items-center gap-1 shadow-xs">
                 <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                <span>كاش: v4</span>
+                <span>كاش: v5</span>
               </span>
               <span class="text-[10px] sm:text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 whitespace-nowrap">
                 سحابي ومستقل 24/7 ⚡
@@ -238,9 +238,33 @@
         <!-- Book Selection -->
         <div>
           <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">اختر الكتاب أو المادة <span class="text-rose-500">*</span></label>
-          <select id="upload-book-select" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
+          <select id="upload-book-select" onchange="onUploadBookChange()" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
             <option value="">-- اختر كتاباً --</option>
           </select>
+        </div>
+
+        <!-- Target Destination (New Chapter vs Append to Existing) -->
+        <div id="upload-target-container" class="hidden p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-3">
+          <label class="block text-xs font-black text-slate-700 dark:text-slate-300">طريقة الإضافة:</label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-bold">
+            <label class="p-3 rounded-xl border-2 border-brand-500 bg-brand-50/60 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 cursor-pointer flex items-center gap-2 transition" id="label-target-new">
+              <input type="radio" name="upload-target-mode" value="new" checked onchange="onUploadTargetModeChange()" class="accent-brand-600">
+              <span>🆕 إنشاء فصل / موضوع جديد</span>
+            </label>
+            <label class="p-3 rounded-xl border-2 border-slate-200 dark:border-slate-700 hover:border-brand-300 text-slate-600 dark:text-slate-300 cursor-pointer flex items-center gap-2 transition" id="label-target-append">
+              <input type="radio" name="upload-target-mode" value="append" onchange="onUploadTargetModeChange()" class="accent-brand-600">
+              <span>➕ إلحاق صفحات بفصل موجود مسبقاً</span>
+            </label>
+          </div>
+
+          <!-- Existing Chapter Select (shown when append is selected) -->
+          <div id="upload-existing-wrap" class="hidden space-y-1.5 pt-2 border-t border-slate-200 dark:border-slate-700">
+            <label class="block text-xs font-black text-brand-600 dark:text-brand-400">اختر الفصل الذي تريد إضافة صفحات جديدة إليه:</label>
+            <select id="upload-existing-material-select" onchange="onUploadExistingMaterialChange()" class="w-full px-3 py-2.5 rounded-xl border border-brand-300 dark:border-brand-700 bg-white dark:bg-slate-900 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500">
+              <option value="">-- اختر فصلاً من هذا الكتاب --</option>
+            </select>
+            <p class="text-[11px] text-slate-400">سيتم دمج الصفحات الجديدة مع تلخيص هذا الفصل وإضافة الأسئلة المستخرجة إلى نفس بنك أسئلة الفصل دون تكرار.</p>
+          </div>
         </div>
 
         <!-- Title & Page Range -->
@@ -369,6 +393,13 @@
             <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">اختر الكتاب / المادة</label>
             <select id="quiz-book-select" onchange="onQuizBookChange()" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
               <option value="">-- اختر كتاباً --</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-bold text-slate-700 dark:text-slate-300 mb-2">تحديد الفصل أو الموضوع للاختبار</label>
+            <select id="quiz-material-select" onchange="onQuizMaterialChange()" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500 outline-none font-semibold">
+              <option value="all">🎯 جميع فصول ومواضيع المادة (امتحان شامل لكل الكتاب)</option>
             </select>
             <div id="quiz-available-badge" class="mt-1 text-xs text-brand-600 dark:text-brand-400 font-bold"></div>
           </div>
@@ -905,7 +936,7 @@
 
       <div class="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs">
         <span class="font-bold text-slate-600 dark:text-slate-400">إصدار النظام والكاش الحالي:</span>
-        <span class="font-black px-2.5 py-1 rounded-lg bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">كاش v4 (أحدث إصدار)</span>
+        <span class="font-black px-2.5 py-1 rounded-lg bg-brand-50 dark:bg-brand-950/60 text-brand-700 dark:text-brand-300 border border-brand-200 dark:border-brand-800">كاش v5 (أحدث إصدار)</span>
       </div>
 
       <button onclick="saveSettings()" class="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-black text-sm shadow transition">حفظ</button>
@@ -918,11 +949,55 @@
       <div class="p-5 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
         <div>
           <h3 class="text-lg font-black text-slate-900 dark:text-white" id="modal-summaries-title">الملخصات</h3>
-          <p class="text-xs text-slate-400">اقرأ ملخصاتك، استمع إليها، وحوّلها إلى بطاقات أو جداول أو خرائط ذهنية</p>
+          <p class="text-xs text-slate-400">فصول ودروس المادة: تعديل، إضافة صفحات، واختبارات مخصصة</p>
         </div>
-        <button onclick="Library.close()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl leading-none">✕</button>
+        <div class="flex items-center gap-2">
+          <button id="modal-summaries-add-chapter-btn" onclick="Library.close(); prepareUploadForBook(Library.getCurrentBook());" class="px-3.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs flex items-center gap-1 shadow-sm transition">
+            <i data-lucide="plus-circle" class="w-3.5 h-3.5"></i>
+            <span>إضافة فصل جديد</span>
+          </button>
+          <button onclick="Library.close()" class="text-slate-400 hover:text-slate-700 dark:hover:text-white text-xl leading-none p-1">✕</button>
+        </div>
       </div>
       <div id="modal-summaries-body" class="p-5 overflow-y-auto custom-scrollbar flex-1 space-y-3"></div>
+    </div>
+  </div>
+
+  
+  <!-- MODAL: EDIT CHAPTER / TOPIC -->
+  <div id="modal-edit-chapter" class="hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 max-w-md w-full p-6 shadow-2xl space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+        <h3 class="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+          <i data-lucide="edit-3" class="w-5 h-5 text-brand-600"></i>
+          <span>تعديل الفصل أو الموضوع</span>
+        </h3>
+        <button onclick="closeEditChapterModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <input type="hidden" id="edit-chapter-id">
+
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">عنوان الفصل أو الموضوع</label>
+          <input type="text" id="edit-chapter-title" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">نطاق الصفحات</label>
+          <input type="text" id="edit-chapter-pages" placeholder="مثال: ص 1 إلى 20" class="w-full px-4 py-2.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold text-slate-900 dark:text-white outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+      </div>
+
+      <div class="pt-2 flex gap-2">
+        <button onclick="saveChapterEdit()" class="flex-1 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-sm shadow transition">
+          حفظ التعديلات
+        </button>
+        <button onclick="closeEditChapterModal()" class="px-5 py-3 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-bold text-sm hover:bg-slate-50 dark:hover:bg-slate-800 transition">
+          إلغاء
+        </button>
+      </div>
     </div>
   </div>
 
